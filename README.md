@@ -1,4 +1,4 @@
-# Equitable Residential Building Retrofit Pathways
+# Equitable Residential Building Transition
 
 _This project develops a building-level workflow for evaluating residential
 retrofit strategies under future climate and power-outage conditions. It
