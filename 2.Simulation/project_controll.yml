@@ -1,0 +1,4996 @@
+schema_version: '0.6'
+os_version: 3.9.0
+os_sha: c77fbb9569
+buildstock_directory: ..
+project_directory: project_inequity # Relative to buildstock_directory
+output_directory: ../Data_output/buildbatch_output
+weather_files_path: ../data/weather.zip
+# Baseline number of units
+baseline:
+  n_buildings_represented: 139647020 # American Community Survey 2021 5-year, B25001, does not include territories
+
+# Sampler type and number of data points per baseline or upgrade
+sampler:
+
+  type: precomputed # For production run
+  args:
+    sample_file: buildstock_ready_final.csv
+
+
+# Workflow generator
+workflow_generator:
+  # ResStock HPXML workflow generator
+  type: residential_hpxml
+  version: 2025.04.29
+
+  args:
+    # Annual simulation and timestep
+
+    build_existing_model:
+      simulation_control_timestep: 15
+      simulation_control_run_period_begin_month: 1
+      simulation_control_run_period_begin_day_of_month: 1
+      simulation_control_run_period_end_month: 12
+      simulation_control_run_period_end_day_of_month: 31
+      simulation_control_run_period_calendar_year: 2018
+      add_component_loads: false
+
+    measures:
+      - measure_dir_name: HybridIslandingControl
+        arguments:
+          outage_mode: true
+          ssp_scenario: ssp245
+          scenario_year: 2020s
+          fail_if_no_outage_in_runperiod: false
+          missing_der_behavior: fail
+          debug_force_outage_start_hour: 0
+          debug_force_outage_duration_hours: 0
+
+
+    # Outputs to include
+    simulation_output_report:
+      timeseries_frequency: hourly
+      include_timeseries_total_consumptions: true
+      include_timeseries_fuel_consumptions: true
+      include_timeseries_end_use_consumptions: true
+
+
+      include_timeseries_zone_temperatures: true
+
+
+      #   - name: People Sensible Heating Rate
+      #   - name: People Total Heating Rate
+      #   - name: Site Outdoor Air Humidity Ratio
+
+    model_measures:
+      - measure_dir_name: AddEnvelopeSummaryReport
+
+    # Other reporting measures to run
+    reporting_measures:
+      - measure_dir_name: QOIReport
+      - measure_dir_name: ServerDirectoryCleanup # tack this on so we can save some disk space (when using debug: true)
+
+    # Files to keep
+    server_directory_cleanup:
+      retain_in_idf: false
+      retain_schedules_csv: false
+      retain_in_osm: false
+
+    debug: false
+
+
+references:
+######## ROOF UPGRADE ############################################################
+
+
+  # --- Ceiling ---
+  # REMDB basis: Unfinished Attic (Ceiling) | Loose Fill | retrofit-mid
+  # Installed cost = 1.81 * (0.02 * R + 0.14) = 0.0362 * R + 0.2534 ($/ft^2)
+  s1_ceil_to_r13: &s1_ceil_to_r13
+    option: Insulation Ceiling|R-13
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - Insulation Ceiling|Uninsulated
+        - Insulation Ceiling|R-7
+    costs: &cost_attic_ceiling_loosefill_mid_retrofit
+      - value: 0.0362
+        multiplier: Floor Area, Attic * Insulation Increase (ft^2 * Delta R-value)
+      - value: 0.2534
+        multiplier: Floor Area, Attic (ft^2)
+
+  s1_ceil_to_r19: &s1_ceil_to_r19
+    option: Insulation Ceiling|R-19
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - Insulation Ceiling|R-13
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s1_ceil_to_r30: &s1_ceil_to_r30
+    option: Insulation Ceiling|R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - Insulation Ceiling|R-19
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s1_ceil_to_r38: &s1_ceil_to_r38
+    option: Insulation Ceiling|R-38
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-30
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s1_ceil_to_r49: &s1_ceil_to_r49
+    option: Insulation Ceiling|R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-38
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s1_ceil_to_r60: &s1_ceil_to_r60
+    option: Insulation Ceiling|R-60
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - ASHRAE IECC Climate Zone 2004|4A
+        - ASHRAE IECC Climate Zone 2004|4B
+        - ASHRAE IECC Climate Zone 2004|4C
+        - ASHRAE IECC Climate Zone 2004|5A
+        - ASHRAE IECC Climate Zone 2004|5B
+        - ASHRAE IECC Climate Zone 2004|6A
+        - ASHRAE IECC Climate Zone 2004|6B
+        - ASHRAE IECC Climate Zone 2004|7A
+        - ASHRAE IECC Climate Zone 2004|7AK
+        - ASHRAE IECC Climate Zone 2004|7B
+        - ASHRAE IECC Climate Zone 2004|8AK
+      - Insulation Ceiling|R-49
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+
+  s1_ceil_maintain_z1_cap: &s1_ceil_maintain_z1_cap
+    option: Insulation Ceiling|R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-30
+    costs: &cost_zero
+      - value: 0.0
+        multiplier: Fixed (1)
+
+  s1_ceil_maintain_z23_cap: &s1_ceil_maintain_z23_cap
+    option: Insulation Ceiling|R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - ASHRAE IECC Climate Zone 2004|2A
+        - ASHRAE IECC Climate Zone 2004|2B
+        - ASHRAE IECC Climate Zone 2004|3A
+        - ASHRAE IECC Climate Zone 2004|3B
+        - ASHRAE IECC Climate Zone 2004|3C
+      - Insulation Ceiling|R-49
+    costs: *cost_zero
+
+  s1_ceil_maintain_max: &s1_ceil_maintain_max
+    option: Insulation Ceiling|R-60
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - Insulation Ceiling|R-60
+    costs: *cost_zero
+
+  # --- Roof ---
+  # REMDB basis: Finished Roof | Spray Foam (Open Cell) | retrofit-mid
+  # Installed cost = 1.29 * (0.27 * R - 0.06) = 0.3483 * R - 0.0774 ($/ft^2)
+  # Current measure DOES NOT support "Roof Area * Insulation Increase", so use precomputed $/ft^2.
+  cost_finished_roof_to_r13_mid_retrofit: &cost_finished_roof_to_r13_mid_retrofit
+    - value: 4.45
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_to_r19_mid_retrofit: &cost_finished_roof_to_r19_mid_retrofit
+    - value: 6.54
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_to_r30_mid_retrofit: &cost_finished_roof_to_r30_mid_retrofit
+    - value: 10.37
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_to_r38_mid_retrofit: &cost_finished_roof_to_r38_mid_retrofit
+    - value: 13.16
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_to_r49_mid_retrofit: &cost_finished_roof_to_r49_mid_retrofit
+    - value: 16.99
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r6_mid_retrofit: &cost_finished_roof_delta_r6_mid_retrofit
+    - value: 2.09
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r8_mid_retrofit: &cost_finished_roof_delta_r8_mid_retrofit
+    - value: 2.79
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r11_mid_retrofit: &cost_finished_roof_delta_r11_mid_retrofit
+    - value: 3.83
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r12_mid_retrofit: &cost_finished_roof_delta_r12_mid_retrofit
+    - value: 4.18
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r17_mid_retrofit: &cost_finished_roof_delta_r17_mid_retrofit
+    - value: 5.92
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r19_mid_retrofit: &cost_finished_roof_delta_r19_mid_retrofit
+    - value: 6.62
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r23_mid_retrofit: &cost_finished_roof_delta_r23_mid_retrofit
+    - value: 8.01
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r30_mid_retrofit: &cost_finished_roof_delta_r30_mid_retrofit
+    - value: 10.45
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r36_mid_retrofit: &cost_finished_roof_delta_r36_mid_retrofit
+    - value: 12.54
+      multiplier: Roof Area (ft^2)
+
+  cost_finished_roof_delta_r42_mid_retrofit: &cost_finished_roof_delta_r42_mid_retrofit
+    - value: 14.63
+      multiplier: Roof Area (ft^2)
+
+  s1_roof_unins_to_r13: &s1_roof_unins_to_r13
+    option: Insulation Roof|Finished, R-13
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - or:
+        - Insulation Roof|Finished, Uninsulated
+        - Insulation Roof|Unfinished, Uninsulated
+    costs: *cost_finished_roof_to_r13_mid_retrofit
+
+  s1_roof_r7_to_r13: &s1_roof_r7_to_r13
+    option: Insulation Roof|Finished, R-13
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-7
+    costs: *cost_finished_roof_delta_r6_mid_retrofit
+
+  s1_roof_to_r19: &s1_roof_to_r19
+    option: Insulation Roof|Finished, R-19
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-13
+    costs: *cost_finished_roof_delta_r6_mid_retrofit
+
+  s1_roof_to_r30: &s1_roof_to_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-19
+    costs: *cost_finished_roof_delta_r11_mid_retrofit
+
+  s1_roof_to_r38: &s1_roof_to_r38
+    option: Insulation Roof|Finished, R-38
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-30
+    costs: *cost_finished_roof_delta_r8_mid_retrofit
+
+  s1_roof_to_r49: &s1_roof_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-38
+    costs: *cost_finished_roof_delta_r11_mid_retrofit
+
+  # --- Roof Maintain ---
+  s1_roof_maintain_z1_cap: &s1_roof_maintain_z1_cap
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-30
+    costs: *cost_zero
+
+  s1_roof_maintain_max: &s1_roof_maintain_max
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-49
+    costs: *cost_zero
+
+
+  # --- Ceiling ---
+  s2_ceil_to_r19: &s2_ceil_to_r19
+    option: Insulation Ceiling|R-19
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - Insulation Ceiling|Uninsulated
+        - Insulation Ceiling|R-7
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_to_r30: &s2_ceil_to_r30
+    option: Insulation Ceiling|R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - Insulation Ceiling|R-13
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_to_r38: &s2_ceil_to_r38
+    option: Insulation Ceiling|R-38
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-19
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_cap_z1: &s2_ceil_cap_z1
+    option: Insulation Ceiling|R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-19
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_to_r49: &s2_ceil_to_r49
+    option: Insulation Ceiling|R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-30
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_maintain_z1: &s2_ceil_maintain_z1
+    option: Insulation Ceiling|R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Ceiling|R-30
+    costs: *cost_zero
+
+  s2_ceil_to_r60: &s2_ceil_to_r60
+    option: Insulation Ceiling|R-60
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - ASHRAE IECC Climate Zone 2004|4A
+        - ASHRAE IECC Climate Zone 2004|4B
+        - ASHRAE IECC Climate Zone 2004|4C
+        - ASHRAE IECC Climate Zone 2004|5A
+        - ASHRAE IECC Climate Zone 2004|5B
+        - ASHRAE IECC Climate Zone 2004|6A
+        - ASHRAE IECC Climate Zone 2004|6B
+        - ASHRAE IECC Climate Zone 2004|7A
+        - ASHRAE IECC Climate Zone 2004|7AK
+        - ASHRAE IECC Climate Zone 2004|7B
+        - ASHRAE IECC Climate Zone 2004|8AK
+      - Insulation Ceiling|R-38
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_cap_z23: &s2_ceil_cap_z23
+    option: Insulation Ceiling|R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - ASHRAE IECC Climate Zone 2004|2A
+        - ASHRAE IECC Climate Zone 2004|2B
+        - ASHRAE IECC Climate Zone 2004|3A
+        - ASHRAE IECC Climate Zone 2004|3B
+        - ASHRAE IECC Climate Zone 2004|3C
+      - Insulation Ceiling|R-38
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_cap_max: &s2_ceil_cap_max
+    option: Insulation Ceiling|R-60
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - ASHRAE IECC Climate Zone 2004|4A
+        - ASHRAE IECC Climate Zone 2004|4B
+        - ASHRAE IECC Climate Zone 2004|4C
+        - ASHRAE IECC Climate Zone 2004|5A
+        - ASHRAE IECC Climate Zone 2004|5B
+        - ASHRAE IECC Climate Zone 2004|6A
+        - ASHRAE IECC Climate Zone 2004|6B
+        - ASHRAE IECC Climate Zone 2004|7A
+        - ASHRAE IECC Climate Zone 2004|7AK
+        - ASHRAE IECC Climate Zone 2004|7B
+        - ASHRAE IECC Climate Zone 2004|8AK
+      - Insulation Ceiling|R-49
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s2_ceil_maintain_z23: &s2_ceil_maintain_z23
+    option: Insulation Ceiling|R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - or:
+        - ASHRAE IECC Climate Zone 2004|2A
+        - ASHRAE IECC Climate Zone 2004|2B
+        - ASHRAE IECC Climate Zone 2004|3A
+        - ASHRAE IECC Climate Zone 2004|3B
+        - ASHRAE IECC Climate Zone 2004|3C
+      - Insulation Ceiling|R-49
+    costs: *cost_zero
+
+  s2_ceil_maintain_all_max: &s2_ceil_maintain_all_max
+    option: Insulation Ceiling|R-60
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - Insulation Ceiling|R-60
+    costs: *cost_zero
+
+  # --- Roof ---
+  s2_roof_unins_to_r19: &s2_roof_unins_to_r19
+    option: Insulation Roof|Finished, R-19
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - or:
+        - Insulation Roof|Finished, Uninsulated
+        - Insulation Roof|Unfinished, Uninsulated
+    costs: *cost_finished_roof_to_r19_mid_retrofit
+
+  s2_roof_r7_to_r19: &s2_roof_r7_to_r19
+    option: Insulation Roof|Finished, R-19
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-7
+    costs: *cost_finished_roof_delta_r12_mid_retrofit
+
+  s2_roof_to_r30: &s2_roof_to_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-13
+    costs: *cost_finished_roof_delta_r17_mid_retrofit
+
+  s2_roof_to_r38: &s2_roof_to_r38
+    option: Insulation Roof|Finished, R-38
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-19
+    costs: *cost_finished_roof_delta_r19_mid_retrofit
+
+  s2_roof_cap_z1: &s2_roof_cap_z1
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-19
+    costs: *cost_finished_roof_delta_r11_mid_retrofit
+
+  s2_roof_to_r49: &s2_roof_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-30
+    costs: *cost_finished_roof_delta_r19_mid_retrofit
+
+  s2_roof_maintain_z1: &s2_roof_maintain_z1
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-30
+    costs: *cost_zero
+
+  s2_roof_cap_max: &s2_roof_cap_max
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-38
+    costs: *cost_finished_roof_delta_r11_mid_retrofit
+
+  s2_roof_maintain_max: &s2_roof_maintain_max
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - Insulation Roof|Finished, R-49
+    costs: *cost_zero
+
+
+  # SCENARIO 3: IECC 2021 Compliance
+
+  s3_iecc_cz1_ceil: &s3_iecc_cz1_ceil
+    option: Insulation Ceiling|R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - ASHRAE IECC Climate Zone 2004|1A
+      - or:
+        - Insulation Ceiling|Uninsulated
+        - Insulation Ceiling|R-7
+        - Insulation Ceiling|R-13
+        - Insulation Ceiling|R-19
+        - Insulation Ceiling|R-30
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+
+  #     - or:
+  #       - Geometry Attic Type|Vented Attic
+  #       - Geometry Attic Type|Unvented Attic
+  #     - ASHRAE IECC Climate Zone 2004|1A
+  #     - or:
+  #       - Insulation Ceiling|R-38
+  #       - Insulation Ceiling|R-49
+  #       - Insulation Ceiling|R-60
+
+
+  s3_iecc_cz1_roof_unins_to_r30: &s3_iecc_cz1_roof_unins_to_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - or:
+        - Insulation Roof|Finished, Uninsulated
+        - Insulation Roof|Unfinished, Uninsulated
+    costs: *cost_finished_roof_to_r30_mid_retrofit
+
+  s3_iecc_cz1_roof_r7_to_r30: &s3_iecc_cz1_roof_r7_to_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-7
+    costs: *cost_finished_roof_delta_r23_mid_retrofit
+
+  s3_iecc_cz1_roof_r13_to_r30: &s3_iecc_cz1_roof_r13_to_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-13
+    costs: *cost_finished_roof_delta_r17_mid_retrofit
+
+  s3_iecc_cz1_roof_r19_to_r30: &s3_iecc_cz1_roof_r19_to_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-19
+    costs: *cost_finished_roof_delta_r11_mid_retrofit
+
+  s3_iecc_cz1_roof_maintain_r30: &s3_iecc_cz1_roof_maintain_r30
+    option: Insulation Roof|Finished, R-30
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-30
+    costs: *cost_zero
+
+
+  #     - or:
+  #       - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+  #       - Geometry Attic Type|None
+  #     - ASHRAE IECC Climate Zone 2004|1A
+  #     - or:
+  #       - Insulation Roof|Finished, R-38
+  #       - Insulation Roof|Finished, R-49
+
+
+  s3_iecc_cz2_8_ceil: &s3_iecc_cz2_8_ceil
+    option: Insulation Ceiling|R-60
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Vented Attic
+        - Geometry Attic Type|Unvented Attic
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - or:
+        - Insulation Ceiling|Uninsulated
+        - Insulation Ceiling|R-7
+        - Insulation Ceiling|R-13
+        - Insulation Ceiling|R-19
+        - Insulation Ceiling|R-30
+        - Insulation Ceiling|R-38
+        - Insulation Ceiling|R-49
+        - Insulation Ceiling|R-60
+    costs: *cost_attic_ceiling_loosefill_mid_retrofit
+
+  s3_iecc_cz2_8_roof_unins_to_r49: &s3_iecc_cz2_8_roof_unins_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - or:
+        - Insulation Roof|Finished, Uninsulated
+        - Insulation Roof|Unfinished, Uninsulated
+    costs: *cost_finished_roof_to_r49_mid_retrofit
+
+  s3_iecc_cz2_8_roof_r7_to_r49: &s3_iecc_cz2_8_roof_r7_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-7
+    costs: *cost_finished_roof_delta_r42_mid_retrofit
+
+  s3_iecc_cz2_8_roof_r13_to_r49: &s3_iecc_cz2_8_roof_r13_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-13
+    costs: *cost_finished_roof_delta_r36_mid_retrofit
+
+  s3_iecc_cz2_8_roof_r19_to_r49: &s3_iecc_cz2_8_roof_r19_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-19
+    costs: *cost_finished_roof_delta_r30_mid_retrofit
+
+  s3_iecc_cz2_8_roof_r30_to_r49: &s3_iecc_cz2_8_roof_r30_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-30
+    costs: *cost_finished_roof_delta_r19_mid_retrofit
+
+  s3_iecc_cz2_8_roof_r38_to_r49: &s3_iecc_cz2_8_roof_r38_to_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-38
+    costs: *cost_finished_roof_delta_r11_mid_retrofit
+
+  s3_iecc_cz2_8_roof_maintain_r49: &s3_iecc_cz2_8_roof_maintain_r49
+    option: Insulation Roof|Finished, R-49
+    apply_logic:
+      - or:
+        - Geometry Attic Type|Finished Attic or Cathedral Ceilings
+        - Geometry Attic Type|None
+      - not: ASHRAE IECC Climate Zone 2004|1A
+      - Insulation Roof|Finished, R-49
+    costs: *cost_zero
+
+
+  roof_upgrade_plus_1: &roof_upgrade_plus_1
+    - *s1_ceil_to_r13
+    - *s1_ceil_to_r19
+    - *s1_ceil_to_r30
+    - *s1_ceil_to_r38
+    - *s1_ceil_to_r49
+    - *s1_ceil_to_r60
+    - *s1_ceil_maintain_z1_cap
+    - *s1_ceil_maintain_z23_cap
+    - *s1_ceil_maintain_max
+    - *s1_roof_unins_to_r13
+    - *s1_roof_r7_to_r13
+    - *s1_roof_to_r19
+    - *s1_roof_to_r30
+    - *s1_roof_to_r38
+    - *s1_roof_to_r49
+    - *s1_roof_maintain_z1_cap
+    - *s1_roof_maintain_max
+
+
+  roof_upgrade_plus_2: &roof_upgrade_plus_2
+    - *s2_ceil_to_r19
+    - *s2_ceil_to_r30
+    - *s2_ceil_to_r38
+    - *s2_ceil_cap_z1
+    - *s2_ceil_to_r49
+    - *s2_ceil_maintain_z1
+    - *s2_ceil_to_r60
+    - *s2_ceil_cap_z23
+    - *s2_ceil_cap_max
+    - *s2_ceil_maintain_z23
+    - *s2_ceil_maintain_all_max
+    - *s2_roof_unins_to_r19
+    - *s2_roof_r7_to_r19
+    - *s2_roof_to_r30
+    - *s2_roof_to_r38
+    - *s2_roof_cap_z1
+    - *s2_roof_to_r49
+    - *s2_roof_maintain_z1
+    - *s2_roof_cap_max
+    - *s2_roof_maintain_max
+
+
+  roof_upgrade_iecc: &roof_upgrade_iecc
+    - *s3_iecc_cz1_ceil
+    # - *s3_iecc_cz1_ceil_maintain_high
+    - *s3_iecc_cz1_roof_unins_to_r30
+    - *s3_iecc_cz1_roof_r7_to_r30
+    - *s3_iecc_cz1_roof_r13_to_r30
+    - *s3_iecc_cz1_roof_r19_to_r30
+    - *s3_iecc_cz1_roof_maintain_r30
+    # - *s3_iecc_cz1_roof_maintain_high
+    - *s3_iecc_cz2_8_ceil
+    - *s3_iecc_cz2_8_roof_unins_to_r49
+    - *s3_iecc_cz2_8_roof_r7_to_r49
+    - *s3_iecc_cz2_8_roof_r13_to_r49
+    - *s3_iecc_cz2_8_roof_r19_to_r49
+    - *s3_iecc_cz2_8_roof_r30_to_r49
+    - *s3_iecc_cz2_8_roof_r38_to_r49
+    - *s3_iecc_cz2_8_roof_maintain_r49
+
+######## WINDOW UPGRADE ############################################################
+
+
+  win_upgrade_single_best: &win_upgrade_single_best
+    option: Windows|Single, Clear, Non-metal, Exterior Low-E Storm
+    apply_logic:
+      - or:
+        - Windows|Single, Clear, Metal
+        - Windows|Single, Clear, Metal, Exterior Clear Storm
+        - Windows|Single, Clear, Metal, Exterior Low-E Storm
+        - Windows|Single, Clear, Non-metal
+        - Windows|Single, Clear, Non-metal, Exterior Clear Storm
+        - Windows|Single, Clear, Non-metal, Exterior Low-E Storm
+    costs: &cost_window_storm_mid_retrofit
+      - value: 25.67
+        multiplier: Window Area (ft^2)
+
+
+  win_upgrade_double_clear_best: &win_upgrade_double_clear_best
+    option: Windows|Double, Clear, Non-metal, Exterior Low-E Storm
+    apply_logic:
+      - or:
+        - Windows|Double, Clear, Metal, Air
+        - Windows|Double, Clear, Metal, Air, Exterior Clear Storm
+        - Windows|Double, Clear, Metal, Exterior Low-E Storm
+        - Windows|Double, Clear, Non-metal, Air
+        - Windows|Double, Clear, Non-metal, Air, Exterior Clear Storm
+        - Windows|Double, Clear, Non-metal, Exterior Low-E Storm
+        - Windows|Double, Clear, Thermal-Break, Air
+    costs: *cost_window_storm_mid_retrofit
+
+
+  win_upgrade_double_lowe_best: &win_upgrade_double_lowe_best
+    option: Windows|Double, Low-E, L-Gain
+    apply_logic:
+      - or:
+        - Windows|Double, Low-E, H-Gain
+        - Windows|Double, Low-E, L-Gain
+        - Windows|Double, Low-E, Non-metal, Air, L-Gain
+        - Windows|Double, Low-E, Non-metal, Air, M-Gain
+    costs: *cost_window_storm_mid_retrofit
+
+
+  win_upgrade_triple_best: &win_upgrade_triple_best
+    option: Windows|Triple, Low-E, Insulated, Argon, L-Gain
+    apply_logic:
+      - or:
+        - Windows|Triple, Low-E, Non-metal, Air, L-Gain
+        - Windows|Triple, Low-E, Insulated, Argon, H-Gain
+        - Windows|Triple, Low-E, Insulated, Argon, L-Gain
+    costs: *cost_window_storm_mid_retrofit
+
+
+  logic_keep_high_perf_windows: &logic_keep_high_perf_windows
+    or:
+
+      - Windows|Triple, Low-E, Insulated, Argon, L-Gain
+      - Windows|Triple, Low-E, Insulated, Argon, H-Gain
+      - Windows|Triple, Low-E, Non-metal, Air, L-Gain
+
+
+      - Windows|Double, Low-E, L-Gain
+      - Windows|Double, Low-E, H-Gain
+      - Windows|Double, Clear, Non-metal, Exterior Low-E Storm
+
+
+      - Windows|EnergyStar, Northern
+      - Windows|EnergyStar, North-Central
+      - Windows|EnergyStar, South-Central
+      - Windows|EnergyStar, Southern
+
+  # 1. Northern Zone
+  es_window_northern: &es_window_northern
+    option: Windows|EnergyStar, Northern
+    apply_logic:
+      - Energystar Climate Zone 2023|Northern
+
+      - not: *logic_keep_high_perf_windows
+    costs: &cost_window_vinyl_replacement_standard
+      - value: 90.36
+        multiplier: Window Area (ft^2)
+
+  # 2. North-Central Zone
+  es_window_north_central: &es_window_north_central
+    option: Windows|EnergyStar, North-Central
+    apply_logic:
+      - Energystar Climate Zone 2023|North-Central
+      - not: *logic_keep_high_perf_windows
+    costs: *cost_window_vinyl_replacement_standard
+
+  # 3. South-Central Zone
+  es_window_south_central: &es_window_south_central
+    option: Windows|EnergyStar, South-Central
+    apply_logic:
+      - Energystar Climate Zone 2023|South-Central
+      - not: *logic_keep_high_perf_windows
+    costs: *cost_window_vinyl_replacement_standard
+
+  # 4. Southern Zone
+  es_window_southern: &es_window_southern
+    option: Windows|EnergyStar, Southern
+    apply_logic:
+      - Energystar Climate Zone 2023|Southern
+      - not: *logic_keep_high_perf_windows
+    costs: *cost_window_vinyl_replacement_standard
+
+
+  #     - Windows|Triple, Low-E, Insulated, Argon, L-Gain
+
+
+  infil_red_30_single: &infil_red_30_single
+    option: Infiltration Reduction|30%
+    apply_logic:
+      - or:
+        - Windows|Single, Clear, Metal
+        - Windows|Single, Clear, Metal, Exterior Clear Storm
+        - Windows|Single, Clear, Metal, Exterior Low-E Storm
+        - Windows|Single, Clear, Non-metal
+        - Windows|Single, Clear, Non-metal, Exterior Clear Storm
+        - Windows|Single, Clear, Non-metal, Exterior Low-E Storm
+    costs: *cost_zero
+
+
+  infil_red_13_others: &infil_red_13_others
+    option: Infiltration Reduction|13%
+    apply_logic:
+      - or:
+        # Double Clear
+        - Windows|Double, Clear, Metal, Air
+        - Windows|Double, Clear, Metal, Air, Exterior Clear Storm
+        - Windows|Double, Clear, Metal, Exterior Low-E Storm
+        - Windows|Double, Clear, Non-metal, Air
+        - Windows|Double, Clear, Non-metal, Air, Exterior Clear Storm
+        - Windows|Double, Clear, Non-metal, Exterior Low-E Storm
+        - Windows|Double, Clear, Thermal-Break, Air
+        # Double Low-E
+        - Windows|Double, Low-E, H-Gain
+        - Windows|Double, Low-E, L-Gain
+        - Windows|Double, Low-E, Non-metal, Air, L-Gain
+        - Windows|Double, Low-E, Non-metal, Air, M-Gain
+        # Triple
+        - Windows|Triple, Low-E, Non-metal, Air, L-Gain
+        - Windows|Triple, Low-E, Insulated, Argon, H-Gain
+        - Windows|Triple, Low-E, Insulated, Argon, L-Gain
+
+        # - Windows|EnergyStar, Northern
+        # - Windows|EnergyStar, North-Central
+        # - Windows|EnergyStar, South-Central
+        # - Windows|EnergyStar, Southern
+      - not: *logic_keep_high_perf_windows
+    costs: *cost_zero
+
+
+  pkg_windows_best_no_infil: &pkg_windows_best_no_infil
+    - *win_upgrade_single_best
+    - *win_upgrade_double_clear_best
+    - *win_upgrade_double_lowe_best
+    - *win_upgrade_triple_best
+
+
+  pkg_windows_energystar_standard: &pkg_windows_energystar_standard
+
+    - *es_window_northern
+    - *es_window_north_central
+    - *es_window_south_central
+    - *es_window_southern
+    # - *es_maintain_high_perf
+
+    - *infil_red_30_single
+    - *infil_red_13_others
+
+
+  pkg_windows_energystar_standard_non_airtighness: &pkg_windows_energystar_standard_non_airtighness
+
+    - *es_window_northern
+    - *es_window_north_central
+    - *es_window_south_central
+    - *es_window_southern
+    # - *es_maintain_high_perf
+
+######## Air tightness ############################################################
+
+
+  logic_gt_10: &logic_gt_10
+    or:
+      - Infiltration|11.25 ACH50
+      - Infiltration|15 ACH50
+      - Infiltration|18.5 ACH50
+      - Infiltration|20 ACH50
+      - Infiltration|25 ACH50
+      - Infiltration|30 ACH50
+      - Infiltration|40 ACH50
+      - Infiltration|50 ACH50
+
+
+  logic_gt_5: &logic_gt_5
+    or:
+
+      - Infiltration|11.25 ACH50
+      - Infiltration|15 ACH50
+      - Infiltration|18.5 ACH50
+      - Infiltration|20 ACH50
+      - Infiltration|25 ACH50
+      - Infiltration|30 ACH50
+      - Infiltration|40 ACH50
+      - Infiltration|50 ACH50
+
+      - Infiltration|10 ACH50
+      - Infiltration|8 ACH50
+      - Infiltration|7.5 ACH50
+      - Infiltration|7 ACH50
+      - Infiltration|7 ACH50, 0.5 Shelter Coefficient
+      - Infiltration|6 ACH50
+      - Infiltration|5.25 ACH50
+
+
+  action_reduce_13_gt_10: &action_reduce_13_gt_10
+    option: Infiltration Reduction|13%
+    apply_logic:
+      - *logic_gt_10
+    costs: &cost_airseal_13_mid_retrofit
+      - value: 0.3457
+        multiplier: Floor Area, Conditioned (ft^2)
+
+
+  action_reduce_20_gt_10: &action_reduce_20_gt_10
+    option: Infiltration Reduction|20%
+    apply_logic:
+      - *logic_gt_10
+    costs: &cost_airseal_20_mid_retrofit
+      - value: 0.4080
+        multiplier: Floor Area, Conditioned (ft^2)
+
+
+  action_reduce_30_gt_10: &action_reduce_30_gt_10
+    option: Infiltration Reduction|30%
+    apply_logic:
+      - *logic_gt_10
+    costs: &cost_airseal_30_mid_retrofit
+      - value: 0.4970
+        multiplier: Floor Area, Conditioned (ft^2)
+
+
+  action_target_5_iecc: &action_target_5_iecc
+    option: Infiltration|5 ACH50
+    apply_logic:
+      - *logic_gt_5
+    costs: &cost_airseal_iecc5_mid_retrofit
+      - value: 0.6600
+        multiplier: Floor Area, Conditioned (ft^2)
+
+
+  pkg_final_infil_reduce_13: &pkg_final_infil_reduce_13
+
+    - *action_reduce_13_gt_10
+
+    - { option: "Infiltration|10 ACH50", apply_logic: ["Infiltration|10 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|8 ACH50", apply_logic: ["Infiltration|8 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7.5 ACH50", apply_logic: ["Infiltration|7.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7 ACH50", apply_logic: ["Infiltration|7 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7 ACH50, 0.5 Shelter Coefficient", apply_logic: ["Infiltration|7 ACH50, 0.5 Shelter Coefficient"], costs: *cost_zero }
+    - { option: "Infiltration|6 ACH50", apply_logic: ["Infiltration|6 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|5.25 ACH50", apply_logic: ["Infiltration|5.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|5 ACH50", apply_logic: ["Infiltration|5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4.5 ACH50", apply_logic: ["Infiltration|4.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4 ACH50", apply_logic: ["Infiltration|4 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3.75 ACH50", apply_logic: ["Infiltration|3.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3 ACH50", apply_logic: ["Infiltration|3 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2.25 ACH50", apply_logic: ["Infiltration|2.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2 ACH50", apply_logic: ["Infiltration|2 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1.5 ACH50", apply_logic: ["Infiltration|1.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1 ACH50", apply_logic: ["Infiltration|1 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.75 ACH50", apply_logic: ["Infiltration|0.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.5 ACH50", apply_logic: ["Infiltration|0.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.25 ACH50", apply_logic: ["Infiltration|0.25 ACH50"], costs: *cost_zero }
+
+
+  pkg_final_infil_reduce_20: &pkg_final_infil_reduce_20
+
+    - *action_reduce_20_gt_10
+
+    - { option: "Infiltration|10 ACH50", apply_logic: ["Infiltration|10 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|8 ACH50", apply_logic: ["Infiltration|8 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7.5 ACH50", apply_logic: ["Infiltration|7.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7 ACH50", apply_logic: ["Infiltration|7 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7 ACH50, 0.5 Shelter Coefficient", apply_logic: ["Infiltration|7 ACH50, 0.5 Shelter Coefficient"], costs: *cost_zero }
+    - { option: "Infiltration|6 ACH50", apply_logic: ["Infiltration|6 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|5.25 ACH50", apply_logic: ["Infiltration|5.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|5 ACH50", apply_logic: ["Infiltration|5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4.5 ACH50", apply_logic: ["Infiltration|4.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4 ACH50", apply_logic: ["Infiltration|4 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3.75 ACH50", apply_logic: ["Infiltration|3.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3 ACH50", apply_logic: ["Infiltration|3 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2.25 ACH50", apply_logic: ["Infiltration|2.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2 ACH50", apply_logic: ["Infiltration|2 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1.5 ACH50", apply_logic: ["Infiltration|1.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1 ACH50", apply_logic: ["Infiltration|1 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.75 ACH50", apply_logic: ["Infiltration|0.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.5 ACH50", apply_logic: ["Infiltration|0.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.25 ACH50", apply_logic: ["Infiltration|0.25 ACH50"], costs: *cost_zero }
+
+
+  pkg_final_infil_reduce_30: &pkg_final_infil_reduce_30
+
+    - *action_reduce_30_gt_10
+
+    - { option: "Infiltration|10 ACH50", apply_logic: ["Infiltration|10 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|8 ACH50", apply_logic: ["Infiltration|8 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7.5 ACH50", apply_logic: ["Infiltration|7.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7 ACH50", apply_logic: ["Infiltration|7 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|7 ACH50, 0.5 Shelter Coefficient", apply_logic: ["Infiltration|7 ACH50, 0.5 Shelter Coefficient"], costs: *cost_zero }
+    - { option: "Infiltration|6 ACH50", apply_logic: ["Infiltration|6 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|5.25 ACH50", apply_logic: ["Infiltration|5.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|5 ACH50", apply_logic: ["Infiltration|5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4.5 ACH50", apply_logic: ["Infiltration|4.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4 ACH50", apply_logic: ["Infiltration|4 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3.75 ACH50", apply_logic: ["Infiltration|3.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3 ACH50", apply_logic: ["Infiltration|3 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2.25 ACH50", apply_logic: ["Infiltration|2.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2 ACH50", apply_logic: ["Infiltration|2 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1.5 ACH50", apply_logic: ["Infiltration|1.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1 ACH50", apply_logic: ["Infiltration|1 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.75 ACH50", apply_logic: ["Infiltration|0.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.5 ACH50", apply_logic: ["Infiltration|0.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.25 ACH50", apply_logic: ["Infiltration|0.25 ACH50"], costs: *cost_zero }
+
+
+  pkg_final_infil_iecc_5: &pkg_final_infil_iecc_5
+
+    - *action_target_5_iecc
+
+    - { option: "Infiltration|5 ACH50", apply_logic: ["Infiltration|5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4.5 ACH50", apply_logic: ["Infiltration|4.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|4 ACH50", apply_logic: ["Infiltration|4 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3.75 ACH50", apply_logic: ["Infiltration|3.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|3 ACH50", apply_logic: ["Infiltration|3 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2.25 ACH50", apply_logic: ["Infiltration|2.25 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|2 ACH50", apply_logic: ["Infiltration|2 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1.5 ACH50", apply_logic: ["Infiltration|1.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|1 ACH50", apply_logic: ["Infiltration|1 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.75 ACH50", apply_logic: ["Infiltration|0.75 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.5 ACH50", apply_logic: ["Infiltration|0.5 ACH50"], costs: *cost_zero }
+    - { option: "Infiltration|0.25 ACH50", apply_logic: ["Infiltration|0.25 ACH50"], costs: *cost_zero }
+
+######## Wall insulation ############################################################
+
+
+  cz_1_2: &cz_1_2
+    or:
+      - ASHRAE IECC Climate Zone 2004|1A
+      - ASHRAE IECC Climate Zone 2004|2A
+      - ASHRAE IECC Climate Zone 2004|2B
+
+  cz_3: &cz_3
+    or:
+      - ASHRAE IECC Climate Zone 2004|3A
+      - ASHRAE IECC Climate Zone 2004|3B
+      - ASHRAE IECC Climate Zone 2004|3C
+
+  cz_4_8: &cz_4_8
+    or:
+      - ASHRAE IECC Climate Zone 2004|4A
+      - ASHRAE IECC Climate Zone 2004|4B
+      - ASHRAE IECC Climate Zone 2004|4C
+      - ASHRAE IECC Climate Zone 2004|5A
+      - ASHRAE IECC Climate Zone 2004|5B
+      - ASHRAE IECC Climate Zone 2004|6A
+      - ASHRAE IECC Climate Zone 2004|6B
+      - ASHRAE IECC Climate Zone 2004|7A
+      - ASHRAE IECC Climate Zone 2004|7AK
+      - ASHRAE IECC Climate Zone 2004|7B
+      - ASHRAE IECC Climate Zone 2004|8AK
+
+
+  # --- Cost anchors: batt full installed costs from uninsulated ---
+  cost_wall_full_r7_mid_retrofit: &cost_wall_full_r7_mid_retrofit
+    - value: 1.28
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_full_r11_mid_retrofit: &cost_wall_full_r11_mid_retrofit
+    - value: 1.44
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_full_r13_mid_retrofit: &cost_wall_full_r13_mid_retrofit
+    - value: 1.52
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_full_r19_mid_retrofit: &cost_wall_full_r19_mid_retrofit
+    - value: 1.76
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_full_r25_mid_retrofit: &cost_wall_full_r25_mid_retrofit
+    - value: 2.00
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  # --- Cost anchors: batt delta-only installed costs ---
+  cost_wall_delta_r2_mid_retrofit: &cost_wall_delta_r2_mid_retrofit
+    - value: 0.08
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r4_mid_retrofit: &cost_wall_delta_r4_mid_retrofit
+    - value: 0.16
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r5_mid_retrofit: &cost_wall_delta_r5_mid_retrofit
+    - value: 0.20
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r6_mid_retrofit: &cost_wall_delta_r6_mid_retrofit
+    - value: 0.24
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r8_mid_retrofit: &cost_wall_delta_r8_mid_retrofit
+    - value: 0.32
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r9_mid_retrofit: &cost_wall_delta_r9_mid_retrofit
+    - value: 0.36
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r12_mid_retrofit: &cost_wall_delta_r12_mid_retrofit
+    - value: 0.48
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  # --- Cost anchors: sheathing / combined ---
+  cost_wall_sheathing_r5_mid_retrofit: &cost_wall_sheathing_r5_mid_retrofit
+    - value: 1.53
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r4_plus_sheathing_mid_retrofit: &cost_wall_delta_r4_plus_sheathing_mid_retrofit
+    - value: 1.69
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r6_plus_sheathing_mid_retrofit: &cost_wall_delta_r6_plus_sheathing_mid_retrofit
+    - value: 1.77
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r8_plus_sheathing_mid_retrofit: &cost_wall_delta_r8_plus_sheathing_mid_retrofit
+    - value: 1.85
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_delta_r12_plus_sheathing_mid_retrofit: &cost_wall_delta_r12_plus_sheathing_mid_retrofit
+    - value: 2.01
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+  cost_wall_full_r19_plus_sheathing_mid_retrofit: &cost_wall_full_r19_plus_sheathing_mid_retrofit
+    - value: 3.29
+      multiplier: Wall Area, Above-Grade, Conditioned (ft^2)
+
+
+  # 2. Upgrade 1: Step Up (+1 Level) - (Target Only, No Maintain)
+
+
+  # --- Brick (+1) ---
+  act_brick_u1_to_r7: &act_brick_u1_to_r7
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-7
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+    costs: *cost_wall_full_r7_mid_retrofit
+
+  act_brick_u1_to_r11: &act_brick_u1_to_r11
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-11
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  act_brick_u1_to_r15: &act_brick_u1_to_r15
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-15
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  act_brick_u1_to_r19: &act_brick_u1_to_r19
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-19
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, R-15
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  # --- CMU (+1) ---
+  act_cmu_u1_to_r7: &act_cmu_u1_to_r7
+    option: Insulation Wall|CMU, 6-in Hollow, R-7
+    apply_logic:
+      - or:
+        - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+        - Insulation Wall|CMU, 12-in Hollow
+        - Insulation Wall|CMU, 6-in Concrete Filled
+    costs: *cost_wall_full_r7_mid_retrofit
+
+
+  act_cmu_u1_to_r11: &act_cmu_u1_to_r11
+    option: Insulation Wall|CMU, 6-in Hollow, R-11
+    apply_logic:
+      - Insulation Wall|CMU, 6-in Hollow, R-7
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+
+  #     - or:
+  #       - Insulation Wall|CMU, 6-in Hollow, R-11
+  #       - Insulation Wall|CMU, 6-in Concrete-Filled, R-10
+  #       - Insulation Wall|CMU, 12-in Hollow, R-10
+
+  act_cmu_u1_r11_to_r15: &act_cmu_u1_r11_to_r15
+    option: Insulation Wall|CMU, 6-in Hollow, R-15
+    apply_logic:
+      - Insulation Wall|CMU, 6-in Hollow, R-11
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  act_cmu_u1_r10_to_r15: &act_cmu_u1_r10_to_r15
+    option: Insulation Wall|CMU, 6-in Hollow, R-15
+    apply_logic:
+      - or:
+        - Insulation Wall|CMU, 6-in Concrete-Filled, R-10
+        - Insulation Wall|CMU, 12-in Hollow, R-10
+    costs: *cost_wall_delta_r5_mid_retrofit
+
+  act_cmu_u1_to_r19: &act_cmu_u1_to_r19
+    option: Insulation Wall|CMU, 6-in Hollow, R-19
+    apply_logic:
+      - Insulation Wall|CMU, 6-in Hollow, R-15
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  # --- Wood (+1) ---
+  act_wood_u1_to_r7: &act_wood_u1_to_r7
+    option: Insulation Wall|Wood Stud, R-7
+    apply_logic:
+      - Insulation Wall|Wood Stud, Uninsulated
+    costs: *cost_wall_full_r7_mid_retrofit
+
+
+  #     - or:
+  #       - Insulation Wall|Wood Stud, R-7
+  #       - Insulation Wall|Wood Stud, R-11
+
+  act_wood_u1_r7_to_r13: &act_wood_u1_r7_to_r13
+    option: Insulation Wall|Wood Stud, R-13
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-7
+    costs: *cost_wall_delta_r6_mid_retrofit
+
+  act_wood_u1_r11_to_r13: &act_wood_u1_r11_to_r13
+    option: Insulation Wall|Wood Stud, R-13
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-11
+    costs: *cost_wall_delta_r2_mid_retrofit
+
+
+  #     - or:
+  #       - Insulation Wall|Wood Stud, R-13
+  #       - Insulation Wall|Wood Stud, R-15
+
+  act_wood_u1_r13_to_r19: &act_wood_u1_r13_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-13
+    costs: *cost_wall_delta_r6_mid_retrofit
+
+  act_wood_u1_r15_to_r19: &act_wood_u1_r15_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-15
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  act_wood_u1_to_plus5: &act_wood_u1_to_plus5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - or:
+        - Insulation Wall|Wood Stud, R-19
+        - Insulation Wall|Wood Stud, R-19, Grade 2
+        - Insulation Wall|Wood Stud, R-19, Grade 3
+    costs: *cost_wall_sheathing_r5_mid_retrofit
+
+  # --- Steel (+1) ---
+  act_steel_u1_to_r13: &act_steel_u1_to_r13
+    option: Insulation Wall|Steel Stud, R-13
+    apply_logic:
+      - Insulation Wall|Steel Stud, Uninsulated
+    costs: *cost_wall_full_r13_mid_retrofit
+
+  act_steel_u1_to_r25: &act_steel_u1_to_r25
+    option: Insulation Wall|Steel Stud, R-25, Grade 3
+    apply_logic:
+      - Insulation Wall|Steel Stud, R-13
+    costs: *cost_wall_delta_r12_mid_retrofit
+
+
+  # 3. Upgrade 2: Step Up (+2 Levels) - (Target Only, No Maintain)
+
+
+  # --- Brick (+2) ---
+  act_brick_u2_to_r11: &act_brick_u2_to_r11
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-11
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+    costs: *cost_wall_full_r11_mid_retrofit
+
+  act_brick_u2_to_r15: &act_brick_u2_to_r15
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-15
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+    costs: *cost_wall_delta_r8_mid_retrofit
+
+  act_brick_u2_to_r19: &act_brick_u2_to_r19
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-19
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+    costs: *cost_wall_delta_r8_mid_retrofit
+
+  act_brick_u2_cap_r19: &act_brick_u2_cap_r19
+    option: Insulation Wall|Brick, 12-in, 3-wythe, R-19
+    apply_logic:
+      - Insulation Wall|Brick, 12-in, 3-wythe, R-15
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  # --- CMU (+2) ---
+  act_cmu_u2_to_r11: &act_cmu_u2_to_r11
+    option: Insulation Wall|CMU, 6-in Hollow, R-11
+    apply_logic:
+      - or:
+        - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+        - Insulation Wall|CMU, 12-in Hollow
+        - Insulation Wall|CMU, 6-in Concrete Filled
+    costs: *cost_wall_full_r11_mid_retrofit
+
+
+  act_cmu_u2_to_r15: &act_cmu_u2_to_r15
+    option: Insulation Wall|CMU, 6-in Hollow, R-15
+    apply_logic:
+      - Insulation Wall|CMU, 6-in Hollow, R-7
+    costs: *cost_wall_delta_r8_mid_retrofit
+
+
+  #     - or:
+  #       - Insulation Wall|CMU, 6-in Hollow, R-11
+  #       - Insulation Wall|CMU, 6-in Concrete-Filled, R-10
+  #       - Insulation Wall|CMU, 12-in Hollow, R-10
+
+  act_cmu_u2_r11_to_r19: &act_cmu_u2_r11_to_r19
+    option: Insulation Wall|CMU, 6-in Hollow, R-19
+    apply_logic:
+      - Insulation Wall|CMU, 6-in Hollow, R-11
+    costs: *cost_wall_delta_r8_mid_retrofit
+
+  act_cmu_u2_r10_to_r19: &act_cmu_u2_r10_to_r19
+    option: Insulation Wall|CMU, 6-in Hollow, R-19
+    apply_logic:
+      - or:
+        - Insulation Wall|CMU, 6-in Concrete-Filled, R-10
+        - Insulation Wall|CMU, 12-in Hollow, R-10
+    costs: *cost_wall_delta_r9_mid_retrofit
+
+  act_cmu_u2_cap_r19: &act_cmu_u2_cap_r19
+    option: Insulation Wall|CMU, 6-in Hollow, R-19
+    apply_logic:
+      - Insulation Wall|CMU, 6-in Hollow, R-15
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+
+  # --- Wood (+2) ---
+  act_wood_u2_to_r13: &act_wood_u2_to_r13
+    option: Insulation Wall|Wood Stud, R-13
+    apply_logic:
+      - Insulation Wall|Wood Stud, Uninsulated
+    costs: *cost_wall_full_r13_mid_retrofit
+
+
+  #     - or:
+  #       - Insulation Wall|Wood Stud, R-7
+  #       - Insulation Wall|Wood Stud, R-11
+
+  act_wood_u2_r7_to_r19: &act_wood_u2_r7_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-7
+    costs: *cost_wall_delta_r12_mid_retrofit
+
+  act_wood_u2_r11_to_r19: &act_wood_u2_r11_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-11
+    costs: *cost_wall_delta_r8_mid_retrofit
+
+
+  #     - or:
+  #       - Insulation Wall|Wood Stud, R-13
+  #       - Insulation Wall|Wood Stud, R-15
+
+
+  act_wood_u2_r13_to_plus5: &act_wood_u2_r13_to_plus5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-13
+    costs: *cost_wall_delta_r6_plus_sheathing_mid_retrofit
+
+  act_wood_u2_r15_to_plus5: &act_wood_u2_r15_to_plus5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - Insulation Wall|Wood Stud, R-15
+    costs: *cost_wall_delta_r4_plus_sheathing_mid_retrofit
+
+  act_wood_u2_cap_plus5: &act_wood_u2_cap_plus5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - or:
+        - Insulation Wall|Wood Stud, R-19
+        - Insulation Wall|Wood Stud, R-19, Grade 2
+        - Insulation Wall|Wood Stud, R-19, Grade 3
+    costs: *cost_wall_sheathing_r5_mid_retrofit
+
+  # --- Steel (+2) ---
+
+
+  #     - Insulation Wall|Steel Stud, Uninsulated
+  #     - Insulation Wall|Steel Stud, R-13
+
+
+  act_steel_u2_uninsulated_to_r25: &act_steel_u2_uninsulated_to_r25
+    option: Insulation Wall|Steel Stud, R-25, Grade 3
+    apply_logic:
+      - Insulation Wall|Steel Stud, Uninsulated
+    costs: *cost_wall_full_r25_mid_retrofit
+
+
+  act_steel_u2_r13_to_r25: &act_steel_u2_r13_to_r25
+    option: Insulation Wall|Steel Stud, R-25, Grade 3
+    apply_logic:
+      - Insulation Wall|Steel Stud, R-13
+    costs: *cost_wall_delta_r12_mid_retrofit
+
+
+  # 4. Upgrade 3: IECC 2021 (Target Only, No Maintain)
+
+
+  # # Zone 1 & 2: Target R-13
+
+
+  #     - *cz_1_2
+
+  #     - or:
+  #       - Insulation Wall|Wood Stud, Uninsulated
+  #       - Insulation Wall|Wood Stud, R-7
+  #       - Insulation Wall|Wood Stud, R-11
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+  #       - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+  #       - Insulation Wall|CMU, 6-in Hollow, R-7
+  #       - Insulation Wall|CMU, 6-in Hollow, R-11
+  #       - Insulation Wall|Steel Stud, Uninsulated
+
+  # # Zone 3: Target R-19
+
+
+  #     - *cz_3
+
+  #     - or:
+  #       - Insulation Wall|Wood Stud, Uninsulated
+  #       - Insulation Wall|Wood Stud, R-7
+  #       - Insulation Wall|Wood Stud, R-11
+  #       - Insulation Wall|Wood Stud, R-13
+  #       - Insulation Wall|Wood Stud, R-15
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+  #       - Insulation Wall|Brick, 12-in, 3-wythe, R-15
+  #       - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+  #       - Insulation Wall|CMU, 6-in Hollow, R-7
+  #       - Insulation Wall|CMU, 6-in Hollow, R-11
+  #       - Insulation Wall|CMU, 6-in Hollow, R-15
+  #       - Insulation Wall|Steel Stud, Uninsulated
+  #       - Insulation Wall|Steel Stud, R-13
+
+
+  # # Zone 4-8: Target R-19+5
+
+
+  #     - *cz_4_8
+
+  #     - not: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+  #     - not: Insulation Wall|Wood Stud, R-36
+  #     - not: Insulation Wall|Wood Stud, R-36, R-5 Sheathing
+  #     - not: Insulation Wall|Double Wood Stud, R-33
+  #     - not: Insulation Wall|Double Wood Stud, R-45, Grade 3
+  #     - not: Insulation Wall|SIP, 9.4 in EPS Core, OSB int.
+  #     - not: Insulation Wall|ICF, 2-in EPS, 12-in Concrete, 2-in EPS
+
+
+  # Zone 1 & 2: Target R-13
+  act_iecc_z12_unins_to_r13: &act_iecc_z12_unins_to_r13
+    option: Insulation Wall|Wood Stud, R-13
+    apply_logic:
+      - *cz_1_2
+      - or:
+        - Insulation Wall|Wood Stud, Uninsulated
+        - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+        - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+        - Insulation Wall|Steel Stud, Uninsulated
+    costs: *cost_wall_full_r13_mid_retrofit
+
+  act_iecc_z12_r7_to_r13: &act_iecc_z12_r7_to_r13
+    option: Insulation Wall|Wood Stud, R-13
+    apply_logic:
+      - *cz_1_2
+      - or:
+        - Insulation Wall|Wood Stud, R-7
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+        - Insulation Wall|CMU, 6-in Hollow, R-7
+    costs: *cost_wall_delta_r6_mid_retrofit
+
+  act_iecc_z12_r11_to_r13: &act_iecc_z12_r11_to_r13
+    option: Insulation Wall|Wood Stud, R-13
+    apply_logic:
+      - *cz_1_2
+      - or:
+        - Insulation Wall|Wood Stud, R-11
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+        - Insulation Wall|CMU, 6-in Hollow, R-11
+    costs: *cost_wall_delta_r2_mid_retrofit
+
+  # Zone 3: Target R-19
+  act_iecc_z3_unins_to_r19: &act_iecc_z3_unins_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - *cz_3
+      - or:
+        - Insulation Wall|Wood Stud, Uninsulated
+        - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+        - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+        - Insulation Wall|Steel Stud, Uninsulated
+    costs: *cost_wall_full_r19_mid_retrofit
+
+  act_iecc_z3_r7_to_r19: &act_iecc_z3_r7_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - *cz_3
+      - or:
+        - Insulation Wall|Wood Stud, R-7
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+        - Insulation Wall|CMU, 6-in Hollow, R-7
+    costs: *cost_wall_delta_r12_mid_retrofit
+
+  act_iecc_z3_r11_to_r19: &act_iecc_z3_r11_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - *cz_3
+      - or:
+        - Insulation Wall|Wood Stud, R-11
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+        - Insulation Wall|CMU, 6-in Hollow, R-11
+    costs: *cost_wall_delta_r8_mid_retrofit
+
+  act_iecc_z3_r13_to_r19: &act_iecc_z3_r13_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - *cz_3
+      - or:
+        - Insulation Wall|Wood Stud, R-13
+        - Insulation Wall|Steel Stud, R-13
+    costs: *cost_wall_delta_r6_mid_retrofit
+
+  act_iecc_z3_r15_to_r19: &act_iecc_z3_r15_to_r19
+    option: Insulation Wall|Wood Stud, R-19
+    apply_logic:
+      - *cz_3
+      - or:
+        - Insulation Wall|Wood Stud, R-15
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-15
+        - Insulation Wall|CMU, 6-in Hollow, R-15
+    costs: *cost_wall_delta_r4_mid_retrofit
+
+  # Zone 4-8: Target R-19+5
+  act_iecc_z48_unins_to_r19_r5: &act_iecc_z48_unins_to_r19_r5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - *cz_4_8
+      - or:
+        - Insulation Wall|Wood Stud, Uninsulated
+        - Insulation Wall|Brick, 12-in, 3-wythe, Uninsulated
+        - Insulation Wall|CMU, 6-in Hollow, Uninsulated
+        - Insulation Wall|Steel Stud, Uninsulated
+    costs: *cost_wall_full_r19_plus_sheathing_mid_retrofit
+
+  act_iecc_z48_r7_to_r19_r5: &act_iecc_z48_r7_to_r19_r5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - *cz_4_8
+      - or:
+        - Insulation Wall|Wood Stud, R-7
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-7
+        - Insulation Wall|CMU, 6-in Hollow, R-7
+    costs: *cost_wall_delta_r12_plus_sheathing_mid_retrofit
+
+  act_iecc_z48_r11_to_r19_r5: &act_iecc_z48_r11_to_r19_r5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - *cz_4_8
+      - or:
+        - Insulation Wall|Wood Stud, R-11
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-11
+        - Insulation Wall|CMU, 6-in Hollow, R-11
+    costs: *cost_wall_delta_r8_plus_sheathing_mid_retrofit
+
+  act_iecc_z48_r13_to_r19_r5: &act_iecc_z48_r13_to_r19_r5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - *cz_4_8
+      - or:
+        - Insulation Wall|Wood Stud, R-13
+        - Insulation Wall|Steel Stud, R-13
+    costs: *cost_wall_delta_r6_plus_sheathing_mid_retrofit
+
+  act_iecc_z48_r15_to_r19_r5: &act_iecc_z48_r15_to_r19_r5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - *cz_4_8
+      - or:
+        - Insulation Wall|Wood Stud, R-15
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-15
+        - Insulation Wall|CMU, 6-in Hollow, R-15
+    costs: *cost_wall_delta_r4_plus_sheathing_mid_retrofit
+
+  act_iecc_z48_r19_to_r19_r5: &act_iecc_z48_r19_to_r19_r5
+    option: Insulation Wall|Wood Stud, R-19, R-5 Sheathing
+    apply_logic:
+      - *cz_4_8
+      - or:
+        - Insulation Wall|Wood Stud, R-19
+        - Insulation Wall|Wood Stud, R-19, Grade 2
+        - Insulation Wall|Wood Stud, R-19, Grade 3
+        - Insulation Wall|Brick, 12-in, 3-wythe, R-19
+        - Insulation Wall|CMU, 6-in Hollow, R-19
+    costs: *cost_wall_sheathing_r5_mid_retrofit
+
+
+  # 5. Packaging (Target Only)
+
+
+  pkg_wall_up1: &pkg_wall_up1
+    - *act_brick_u1_to_r7
+    - *act_brick_u1_to_r11
+    - *act_brick_u1_to_r15
+    - *act_brick_u1_to_r19
+    - *act_cmu_u1_to_r7
+    - *act_cmu_u1_to_r11
+    - *act_cmu_u1_r11_to_r15
+    - *act_cmu_u1_r10_to_r15
+    - *act_cmu_u1_to_r19
+    - *act_wood_u1_to_r7
+    - *act_wood_u1_r7_to_r13
+    - *act_wood_u1_r11_to_r13
+    - *act_wood_u1_r13_to_r19
+    - *act_wood_u1_r15_to_r19
+    - *act_wood_u1_to_plus5
+    - *act_steel_u1_to_r13
+    - *act_steel_u1_to_r25
+
+
+  pkg_wall_up2: &pkg_wall_up2
+    - *act_brick_u2_to_r11
+    - *act_brick_u2_to_r15
+    - *act_brick_u2_to_r19
+    - *act_brick_u2_cap_r19
+    - *act_cmu_u2_to_r11
+    - *act_cmu_u2_to_r15
+    - *act_cmu_u2_r11_to_r19
+    - *act_cmu_u2_r10_to_r19
+    - *act_cmu_u2_cap_r19
+    - *act_wood_u2_to_r13
+    - *act_wood_u2_r7_to_r19
+    - *act_wood_u2_r11_to_r19
+    - *act_wood_u2_r13_to_plus5
+    - *act_wood_u2_r15_to_plus5
+    - *act_wood_u2_cap_plus5
+    - *act_steel_u2_uninsulated_to_r25
+    - *act_steel_u2_r13_to_r25
+
+
+  pkg_wall_iecc: &pkg_wall_iecc
+    - *act_iecc_z12_unins_to_r13
+    - *act_iecc_z12_r7_to_r13
+    - *act_iecc_z12_r11_to_r13
+    - *act_iecc_z3_unins_to_r19
+    - *act_iecc_z3_r7_to_r19
+    - *act_iecc_z3_r11_to_r19
+    - *act_iecc_z3_r13_to_r19
+    - *act_iecc_z3_r15_to_r19
+    - *act_iecc_z48_unins_to_r19_r5
+    - *act_iecc_z48_r7_to_r19_r5
+    - *act_iecc_z48_r11_to_r19_r5
+    - *act_iecc_z48_r13_to_r19_r5
+    - *act_iecc_z48_r15_to_r19_r5
+    - *act_iecc_z48_r19_to_r19_r5
+
+######## Dual Fuel commonly electrify ############################################
+
+
+  logic_exclude_shared: &logic_exclude_shared
+    not:
+      - or:
+        - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Electricity
+        - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Fuel
+        - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Electricity
+        - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Fuel
+        - HVAC Shared Efficiencies|Fan Coil Cooling Only
+        # - HVAC Shared Efficiencies|Shared Heating
+        # - HVAC Shared Efficiencies|Shared Cooling
+
+  logic_keep_existing_hp: &logic_keep_existing_hp
+    or:
+      - HVAC Cooling Type|Ducted Heat Pump
+      - HVAC Cooling Type|Non-Ducted Heat Pump
+      - HVAC Heating Efficiency|GSHP, EER 18.6, COP 3.8
+      - HVAC Heating Efficiency|GSHP, EER 20.5, COP 4.0
+      - HVAC Heating Efficiency|GSHP, EER 30.9, COP 4.4
+
+  logic_dual_fuel_cold: &logic_dual_fuel_cold
+    and:
+      - HVAC Has Ducts|Yes
+      - *logic_exclude_shared
+      - not: *logic_keep_existing_hp
+      - or: # Cold Climate Zones
+        - ASHRAE IECC Climate Zone 2004|5A
+        - ASHRAE IECC Climate Zone 2004|5B
+        - ASHRAE IECC Climate Zone 2004|6A
+        - ASHRAE IECC Climate Zone 2004|6B
+        - ASHRAE IECC Climate Zone 2004|7A
+        - ASHRAE IECC Climate Zone 2004|7B
+        - ASHRAE IECC Climate Zone 2004|7AK
+        - ASHRAE IECC Climate Zone 2004|8AK
+      - or: # Gas Availability
+        - Heating Fuel|Natural Gas
+        - Water Heater Fuel|Natural Gas
+        - Cooking Range|Gas
+        - Clothes Dryer|Gas
+        - HVAC Secondary Heating Fuel|Natural Gas
+
+  logic_dual_fuel_warm: &logic_dual_fuel_warm
+    and:
+      - HVAC Has Ducts|Yes
+      - *logic_exclude_shared
+      - not: *logic_keep_existing_hp
+      - or: # Warm Climate Zones
+          - ASHRAE IECC Climate Zone 2004|1A
+          - ASHRAE IECC Climate Zone 2004|2A
+          - ASHRAE IECC Climate Zone 2004|2B
+          - ASHRAE IECC Climate Zone 2004|3A
+          - ASHRAE IECC Climate Zone 2004|3B
+          - ASHRAE IECC Climate Zone 2004|3C
+          - ASHRAE IECC Climate Zone 2004|4A
+          - ASHRAE IECC Climate Zone 2004|4B
+          - ASHRAE IECC Climate Zone 2004|4C
+      - or: # Gas Availability
+        - Heating Fuel|Natural Gas
+        - Water Heater Fuel|Natural Gas
+        - Cooking Range|Gas
+        - Clothes Dryer|Gas
+        - HVAC Secondary Heating Fuel|Natural Gas
+
+
+  act_df_autosize_heat: &act_df_autosize_heat
+    option: "HVAC Heating Autosizing Factor|40% Oversized"
+    apply_logic:
+      - or:
+        - *logic_dual_fuel_cold
+        - *logic_dual_fuel_warm
+    costs: *cost_zero
+
+  act_df_autosize_cool: &act_df_autosize_cool
+    option: "HVAC Cooling Autosizing Factor|40% Oversized"
+    apply_logic:
+      - or:
+        - *logic_dual_fuel_cold
+        - *logic_dual_fuel_warm
+    costs: *cost_zero
+
+
+  act_df_cold_eff: &act_df_cold_eff
+    option: "HVAC Heating Efficiency|Dual-Fuel ASHP, SEER 15.2, 7.8 HSPF2, Integrated Backup, 95.0% AFUE NG, 35F switchover"
+    apply_logic: *logic_dual_fuel_cold
+    costs: &cost_ducted_ashp_seer15_2_mid_retrofit
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 10123.57
+        multiplier: Fixed (1)
+
+
+  act_df_warm_eff: &act_df_warm_eff
+    option: "HVAC Heating Efficiency|Dual-Fuel ASHP, SEER 15.2, 7.8 HSPF2, Integrated Backup, 92.5% AFUE NG, 35F switchover"
+    apply_logic: *logic_dual_fuel_warm
+    costs: *cost_ducted_ashp_seer15_2_mid_retrofit
+
+
+  act_df_cool_eff: &act_df_cool_eff
+    option: "HVAC Cooling Efficiency|Ducted Heat Pump"
+    apply_logic:
+      - or:
+        - *logic_dual_fuel_cold
+        - *logic_dual_fuel_warm
+    costs: *cost_zero
+
+  act_df_global_cond: &act_df_global_cond
+    option: "HVAC Cooling Partial Space Conditioning|100% Conditioned"
+    apply_logic:
+      - or:
+        - *logic_dual_fuel_cold
+        - *logic_dual_fuel_warm
+    costs: *cost_zero
+
+
+  pkg_hvac_dual_fuel: &pkg_hvac_dual_fuel
+    - *act_df_autosize_heat
+    - *act_df_autosize_cool
+    - *act_df_cold_eff
+    - *act_df_warm_eff
+    - *act_df_cool_eff
+    - *act_df_global_cond
+
+
+  logic_mshp_target: &logic_mshp_target
+    - HVAC Has Ducts|No
+    - not: *logic_keep_existing_hp
+    - not: Heating Fuel|Wood
+    - not: Heating Fuel|Other Fuel
+    - not: Heating Fuel|None
+
+    - not:
+        or:
+          - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Electricity
+          - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Fuel
+          - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Electricity
+          - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Fuel
+          # - HVAC Shared Efficiencies|Shared Heating
+
+    - not:
+        and:
+          - Geometry Building Type Height|Multi-Family with 5+ Units, 8+ Stories
+
+
+  act_mshp_eff: &act_mshp_eff
+    option: "HVAC Heating Efficiency|MSHP, SEER 16, 9.2 HSPF, Max Load"
+    apply_logic: *logic_mshp_target
+    costs: &cost_mshp_nonducted_seer16_mid_retrofit
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 1834.85
+        multiplier: Fixed (1)
+
+
+  act_mshp_type_heat: &act_mshp_type_heat
+    option: "HVAC Heating Type|Non-Ducted Heat Pump"
+    apply_logic: *logic_mshp_target
+    costs: *cost_zero
+
+
+  act_mshp_type_cool: &act_mshp_type_cool
+    option: "HVAC Cooling Type|Non-Ducted Heat Pump"
+    apply_logic: *logic_mshp_target
+    costs: *cost_zero
+
+
+  act_mshp_eff_cool: &act_mshp_eff_cool
+    option: "HVAC Cooling Efficiency|None"
+    apply_logic: *logic_mshp_target
+    costs: *cost_zero
+
+
+  act_mshp_fuel: &act_mshp_fuel
+    option: "Heating Fuel|Electricity"
+    apply_logic: *logic_mshp_target
+    costs: *cost_zero
+
+
+  act_mshp_autosize: &act_mshp_autosize
+    option: "HVAC Heating Autosizing Factor|40% Oversized"
+    apply_logic: *logic_mshp_target
+    costs: *cost_zero
+
+
+  act_mshp_global_cond: &act_mshp_global_cond
+    option: "HVAC Cooling Partial Space Conditioning|100% Conditioned"
+    apply_logic: *logic_mshp_target
+    costs: *cost_zero
+
+
+  pkg_hvac_mshp_electrification: &pkg_hvac_mshp_electrification
+    - *act_mshp_autosize
+    - *act_mshp_eff
+    - *act_mshp_type_heat
+    - *act_mshp_type_cool
+    - *act_mshp_eff_cool
+    - *act_mshp_fuel
+    - *act_mshp_global_cond
+
+
+  pkg_hvac_common_elec: &pkg_hvac_common_elec
+    - *act_df_autosize_heat
+    - *act_df_autosize_cool
+    - *act_df_cold_eff
+    - *act_df_warm_eff
+    - *act_df_cool_eff
+    - *act_df_global_cond
+    - *act_mshp_autosize
+    - *act_mshp_eff
+    - *act_mshp_type_heat
+    - *act_mshp_type_cool
+    - *act_mshp_eff_cool
+    - *act_mshp_fuel
+    - *act_mshp_global_cond
+
+######## deep electrifyicaiton #######################################
+
+  fossil_fuel_or_electricity: &fossil_fuel_or_electricity
+    - not: Heating Fuel|Wood
+    - not: Heating Fuel|Other Fuel
+    - not: Heating Fuel|None
+
+  cchp_apply_logic: &typical_cold_climate_logic
+    and:
+      - HVAC Has Ducts|Yes # apply to homes with ducts who have non-shared HVAC or shared HVAC with room for a condenser
+      - not: *logic_keep_existing_hp
+      - or:
+          - not:
+            - or:
+              - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Electricity
+              - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Fuel
+              - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Electricity
+              - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Fuel
+              - HVAC Shared Efficiencies|Fan Coil Cooling Only
+          # - or:
+          - and:
+            - HVAC Cooling Type|Ducted Heat Pump
+            - or:
+              - Geometry Building Type ACS|10 to 19 Unit
+              - Geometry Building Type ACS|2 Unit
+              - Geometry Building Type ACS|20 to 49 Unit
+              - Geometry Building Type ACS|3 or 4 Unit
+              - Geometry Building Type ACS|5 to 9 Unit
+              - Geometry Building Type ACS|50 or more Unit
+          - and:
+            - HVAC Cooling Type|Non-Ducted Heat Pump
+            - or:
+              - Geometry Building Type ACS|10 to 19 Unit
+              - Geometry Building Type ACS|2 Unit
+              - Geometry Building Type ACS|20 to 49 Unit
+              - Geometry Building Type ACS|3 or 4 Unit
+              - Geometry Building Type ACS|5 to 9 Unit
+              - Geometry Building Type ACS|50 or more Unit
+          - and:
+            - HVAC Cooling Type|Central AC
+            - not: HVAC Shared Efficiencies|Fan Coil Cooling Only
+            - or:
+              - Geometry Building Type ACS|10 to 19 Unit
+              - Geometry Building Type ACS|2 Unit
+              - Geometry Building Type ACS|20 to 49 Unit
+              - Geometry Building Type ACS|3 or 4 Unit
+              - Geometry Building Type ACS|5 to 9 Unit
+              - Geometry Building Type ACS|50 or more Unit
+
+
+  logic_cchp_mshp: &logic_cchp_mshp
+    - HVAC Has Ducts|No
+    - *fossil_fuel_or_electricity
+    - not: *logic_keep_existing_hp
+
+    - not:
+        or:
+          - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Electricity
+          - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Fuel
+          - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Electricity
+          - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Fuel
+          - HVAC Shared Efficiencies|Fan Coil Cooling Only
+          # - HVAC Shared Efficiencies|Shared Heating
+          # - HVAC Shared Efficiencies|Shared Cooling
+
+    - not:
+        and:
+          - Geometry Building Type Height|Multi-Family with 5+ Units, 8+ Stories
+
+
+  logic_cchp_any: &logic_cchp_any
+    and:
+      - *fossil_fuel_or_electricity
+      - or:
+          - *typical_cold_climate_logic
+          - *logic_cchp_mshp
+
+
+  act_cchp_ducted_eff: &act_cchp_ducted_eff
+    option: "HVAC Heating Efficiency|ASHP, SEER2 17.5, 8.5 HSPF2, Typical Cold Climate"
+    apply_logic: *typical_cold_climate_logic
+    costs: &cost_ducted_cchp_mid_retrofit
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 11594.32
+        multiplier: Fixed (1)
+
+  act_cchp_ducted_perf: &act_cchp_ducted_perf
+    option: "HVAC Detailed Performance Data|Cold Climate Heat Pump Ducted"
+    apply_logic: *typical_cold_climate_logic
+    costs: *cost_zero
+
+
+  act_cchp_ducted_cool_eff: &act_cchp_ducted_cool_eff
+    option: "HVAC Cooling Efficiency|Ducted Heat Pump"
+    apply_logic: *typical_cold_climate_logic
+
+
+  act_cchp_ducted_cool_fraction: &act_cchp_ducted_cool_fraction
+    option: "HVAC Cooling Partial Space Conditioning|100% Conditioned"
+    apply_logic: *typical_cold_climate_logic
+    costs: *cost_zero
+
+
+  act_cchp_ducted_fuel: &act_cchp_ducted_fuel
+    option: "Heating Fuel|Electricity"
+    apply_logic:
+      - and:
+          - *typical_cold_climate_logic
+          - not: Heating Fuel|Electricity
+    costs: *cost_zero
+
+
+  act_cchp_ducted_type_fuel: &act_cchp_ducted_type_fuel
+    option: "HVAC Heating Type And Fuel|Electricity ASHP"
+    apply_logic:
+      - and:
+          - *typical_cold_climate_logic
+          - not: HVAC Heating Type And Fuel|Electricity ASHP
+    costs: *cost_zero
+
+
+  act_cchp_mshp_eff: &act_cchp_mshp_eff
+    option: "HVAC Heating Efficiency|MSHP, SEER2 22.7, 10.3 HSPF2, Typical Cold Climate"
+    apply_logic: *logic_cchp_mshp
+    costs: &cost_mshp_cchp_mid_retrofit
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3735.70
+        multiplier: Fixed (1)
+
+
+  act_cchp_mshp_perf: &act_cchp_mshp_perf
+    option: "HVAC Detailed Performance Data|Cold Climate Heat Pump Non-Ducted"
+    apply_logic: *logic_cchp_mshp
+    costs: *cost_zero
+
+
+  act_cchp_mshp_cool_type: &act_cchp_mshp_cool_type
+    option: "HVAC Cooling Type|Non-Ducted Heat Pump"
+    apply_logic: *logic_cchp_mshp
+    costs: *cost_zero
+
+  act_cchp_mshp_cool_eff_none: &act_cchp_mshp_cool_eff_none
+    option: "HVAC Cooling Efficiency|None"
+    apply_logic: *logic_cchp_mshp
+    costs: *cost_zero
+
+  act_cchp_mshp_cool_fraction: &act_cchp_mshp_cool_fraction
+    option: "HVAC Cooling Partial Space Conditioning|100% Conditioned"
+    apply_logic: *logic_cchp_mshp
+    costs: *cost_zero
+
+
+  act_cchp_mshp_fuel: &act_cchp_mshp_fuel
+    option: "Heating Fuel|Electricity"
+    apply_logic:
+      - and:
+          - *logic_cchp_mshp
+          - not: Heating Fuel|Electricity
+    costs: *cost_zero
+
+
+  act_cchp_mshp_type_fuel: &act_cchp_mshp_type_fuel
+    option: "HVAC Heating Type And Fuel|Electricity MSHP"
+    apply_logic:
+      - and:
+          - *logic_cchp_mshp
+          - not: HVAC Heating Type And Fuel|Electricity MSHP
+    costs: *cost_zero
+
+
+  pkg_hvac_cchp_ducted: &pkg_hvac_cchp_ducted
+    - *act_cchp_ducted_eff
+    - *act_cchp_ducted_perf
+    - *act_cchp_ducted_cool_eff
+    - *act_cchp_ducted_cool_fraction
+    - *act_cchp_ducted_fuel
+    - *act_cchp_ducted_type_fuel
+
+
+  pkg_hvac_cchp_mshp: &pkg_hvac_cchp_mshp
+    - *act_cchp_mshp_eff
+    - *act_cchp_mshp_perf
+    - *act_cchp_mshp_cool_type
+    - *act_cchp_mshp_cool_eff_none
+    - *act_cchp_mshp_cool_fraction
+    - *act_cchp_mshp_fuel
+    - *act_cchp_mshp_type_fuel
+
+
+  pkg_hvac_deep_cchp: &pkg_hvac_deep_cchp
+    - *act_cchp_ducted_eff
+    - *act_cchp_ducted_perf
+    - *act_cchp_ducted_cool_eff
+    - *act_cchp_ducted_cool_fraction
+    - *act_cchp_ducted_fuel
+    - *act_cchp_ducted_type_fuel
+    - *act_cchp_mshp_eff
+    - *act_cchp_mshp_perf
+    - *act_cchp_mshp_cool_type
+    - *act_cchp_mshp_cool_eff_none
+    - *act_cchp_mshp_cool_fraction
+    - *act_cchp_mshp_fuel
+    - *act_cchp_mshp_type_fuel
+
+######## High-Efficiency Fossil Furnaces (No Electrification) ###################
+
+
+  logic_fossil_heat_noshared_base: &logic_fossil_heat_noshared_base
+    and:
+      - not: Heating Fuel|Electricity
+      - not: Heating Fuel|Wood
+      - not: Heating Fuel|Other Fuel
+      - not: Heating Fuel|None
+      - not:
+          or:
+            - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Electricity
+            - HVAC Shared Efficiencies|Boiler Baseboards Heating Only, Fuel
+            - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Electricity
+            - HVAC Shared Efficiencies|Fan Coil Heating and Cooling, Fuel
+            - HVAC Shared Efficiencies|Fan Coil Cooling Only
+            # - HVAC Shared Efficiencies|Shared Heating
+            # - HVAC Shared Efficiencies|Shared Cooling
+
+
+  logic_furnace_ng: &logic_furnace_ng
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Natural Gas Fuel Furnace
+
+  logic_furnace_propane: &logic_furnace_propane
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Propane Fuel Furnace
+
+  logic_furnace_fueloil: &logic_furnace_fueloil
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Fuel Oil Fuel Furnace
+
+
+  logic_wallfurnace_ng: &logic_wallfurnace_ng
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Natural Gas Fuel Wall/Floor Furnace
+
+  logic_wallfurnace_propane: &logic_wallfurnace_propane
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Propane Fuel Wall/Floor Furnace
+
+  logic_wallfurnace_fueloil: &logic_wallfurnace_fueloil
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Fuel Oil Fuel Wall/Floor Furnace
+
+
+  logic_boiler_ng: &logic_boiler_ng
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Natural Gas Fuel Boiler
+
+  logic_boiler_propane: &logic_boiler_propane
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Propane Fuel Boiler
+
+  logic_boiler_fueloil: &logic_boiler_fueloil
+    - *logic_fossil_heat_noshared_base
+    - HVAC Heating Type And Fuel|Fuel Oil Fuel Boiler
+
+
+  logic_heating_fossil_eff_any: &logic_heating_fossil_eff_any
+    or:
+      - *logic_furnace_ng
+      - *logic_furnace_propane
+      - *logic_furnace_fueloil
+      - *logic_wallfurnace_ng
+      - *logic_wallfurnace_propane
+      - *logic_wallfurnace_fueloil
+      - *logic_boiler_ng
+      - *logic_boiler_propane
+      - *logic_boiler_fueloil
+
+
+  act_furnace_ng_95: &act_furnace_ng_95
+    option: "HVAC Heating Efficiency|Fuel Furnace, 95% AFUE"
+    apply_logic:
+      - *logic_furnace_ng
+      - or:
+          - HVAC Heating Efficiency|Fuel Furnace, 60% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 68% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 80% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 83% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 85% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 88% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 90% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 92.5% AFUE
+    costs: &cost_furnace_95_mid_retrofit
+      - value: 6.50
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3546.50
+        multiplier: Fixed (1)
+
+
+  act_furnace_propane_95: &act_furnace_propane_95
+    option: "HVAC Heating Efficiency|Fuel Furnace, 95% AFUE"
+    apply_logic:
+      - *logic_furnace_propane
+      - or:
+          - HVAC Heating Efficiency|Fuel Furnace, 60% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 68% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 80% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 83% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 85% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 88% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 90% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 92.5% AFUE
+    costs: *cost_furnace_95_mid_retrofit
+
+
+  act_furnace_fueloil_88: &act_furnace_fueloil_88
+    option: "HVAC Heating Efficiency|Fuel Furnace, 88% AFUE"
+    apply_logic:
+      - *logic_furnace_fueloil
+      - or:
+          - HVAC Heating Efficiency|Fuel Furnace, 60% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 68% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 80% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 83% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 85% AFUE
+    costs: &cost_furnace_88_mid_retrofit
+      - value: 6.50
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3243.75
+        multiplier: Fixed (1)
+
+
+  act_wallfurnace_ng_68: &act_wallfurnace_ng_68
+    option: "HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 68% AFUE"
+    apply_logic:
+      - *logic_wallfurnace_ng
+      - HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 60% AFUE
+    costs: &cost_wall_furnace_68_mid_retrofit
+      - value: 7.50
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 1697.00
+        multiplier: Fixed (1)
+
+
+  act_wallfurnace_propane_68: &act_wallfurnace_propane_68
+    option: "HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 68% AFUE"
+    apply_logic:
+      - *logic_wallfurnace_propane
+      - HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 60% AFUE
+    costs: *cost_wall_furnace_68_mid_retrofit
+
+
+  act_wallfurnace_fueloil_68: &act_wallfurnace_fueloil_68
+    option: "HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 68% AFUE"
+    apply_logic:
+      - *logic_wallfurnace_fueloil
+      - HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 60% AFUE
+    costs: *cost_wall_furnace_68_mid_retrofit
+
+
+  act_boiler_ng_95: &act_boiler_ng_95
+    option: "HVAC Heating Efficiency|Fuel Boiler, 95% AFUE, OAT Reset"
+    apply_logic:
+      - *logic_boiler_ng
+      - or:
+          - HVAC Heating Efficiency|Fuel Boiler, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 80% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 82% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 83% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 85% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 90% AFUE
+    costs: &cost_boiler_condensing_95_mid_retrofit
+      - value: 30.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 4339.31
+        multiplier: Fixed (1)
+
+
+  act_boiler_propane_95: &act_boiler_propane_95
+    option: "HVAC Heating Efficiency|Fuel Boiler, 95% AFUE, OAT Reset"
+    apply_logic:
+      - *logic_boiler_propane
+      - or:
+          - HVAC Heating Efficiency|Fuel Boiler, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 80% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 82% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 83% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 85% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 90% AFUE
+    costs: *cost_boiler_condensing_95_mid_retrofit
+
+
+  act_boiler_fueloil_95: &act_boiler_fueloil_95
+    option: "HVAC Heating Efficiency|Fuel Boiler, 95% AFUE, OAT Reset"
+    apply_logic:
+      - *logic_boiler_fueloil
+      - or:
+          - HVAC Heating Efficiency|Fuel Boiler, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 80% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 82% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 83% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 85% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 90% AFUE
+    costs: &cost_boiler_oil_95_mid_retrofit
+      - value: 20.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 5128.67
+        multiplier: Fixed (1)
+
+
+  pkg_hvac_fossil_high_eff_all: &pkg_hvac_fossil_high_eff_all
+    - *act_furnace_ng_95
+    - *act_furnace_propane_95
+    - *act_furnace_fueloil_88
+    - *act_wallfurnace_ng_68
+    - *act_wallfurnace_propane_68
+    - *act_wallfurnace_fueloil_68
+    - *act_boiler_ng_95
+    - *act_boiler_propane_95
+    - *act_boiler_fueloil_95
+
+######## Minimum Efficiency Furnaces and Air Conditioners Circa 2025 ###########
+
+
+  logic_min_eff_hvac: &logic_min_eff_hvac
+    - *fossil_fuel_or_electricity
+    - *logic_exclude_shared
+
+
+  # ---- Electric heating ----
+  act_min_eff_heat_elec_furnace_like: &act_min_eff_heat_elec_furnace_like
+    option: "HVAC Heating Efficiency|Electric Furnace, 100% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Electric Furnace, 100% AFUE
+    costs: &cost_electric_furnace_proxy_mid_retrofit
+      - value: 10.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3762.75
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_elec_boiler_like: &act_min_eff_heat_elec_boiler_like
+    option: "HVAC Heating Efficiency|Electric Boiler, 100% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Electric Boiler, 100% AFUE
+    costs: &cost_electric_boiler_proxy_mid_retrofit
+      - value: 20.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 6620.98
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_elec_baseboard_like: &act_min_eff_heat_elec_baseboard_like
+    option: "HVAC Heating Efficiency|Electric Baseboard, 100% Efficiency"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Electric Baseboard, 100% Efficiency
+    costs: &cost_electric_baseboard_mid_retrofit
+      - value: 90.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+
+  act_min_eff_heat_elec_wallfurn_like: &act_min_eff_heat_elec_wallfurn_like
+    option: "HVAC Heating Efficiency|Electric Wall Furnace, 100% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Electric Wall Furnace, 100% AFUE
+    costs: *cost_electric_furnace_proxy_mid_retrofit
+
+
+  act_min_eff_heat_wallfurn_60_like: &act_min_eff_heat_wallfurn_60_like
+    option: "HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 60% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 60% AFUE
+    costs: &cost_wallfurnace_60_mid_retrofit
+      - value: 10.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 2032.75
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_wallfurn_68_like: &act_min_eff_heat_wallfurn_68_like
+    option: "HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 68% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Fuel Wall/Floor Furnace, 68% AFUE
+    costs: *cost_wall_furnace_68_mid_retrofit
+
+
+  act_min_eff_heat_gshp_18_6: &act_min_eff_heat_gshp_18_6
+    option: "HVAC Heating Efficiency|GSHP, EER 18.6, COP 3.8"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|GSHP, EER 18.6, COP 3.8
+    costs: &cost_gshp_mid_retrofit
+      - value: 896.03
+        multiplier: "Size, Heating System Primary (kBtu/h)"
+
+  act_min_eff_heat_gshp_20_5: &act_min_eff_heat_gshp_20_5
+    option: "HVAC Heating Efficiency|GSHP, EER 20.5, COP 4.0"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|GSHP, EER 20.5, COP 4.0
+    costs: *cost_gshp_mid_retrofit
+
+  act_min_eff_heat_gshp_30_9: &act_min_eff_heat_gshp_30_9
+    option: "HVAC Heating Efficiency|GSHP, EER 30.9, COP 4.4"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|GSHP, EER 30.9, COP 4.4
+    costs: *cost_gshp_mid_retrofit
+
+
+  act_min_eff_heat_mshp_14_5_8_2: &act_min_eff_heat_mshp_14_5_8_2
+    option: "HVAC Heating Efficiency|MSHP, SEER 14.5, 8.2 HSPF"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 14.5, 8.2 HSPF
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 1473.92
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_14_5_8_2_ducted: &act_min_eff_heat_mshp_14_5_8_2_ducted
+    option: "HVAC Heating Efficiency|MSHP, SEER 14.5, 8.2 HSPF, Ducted"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 14.5, 8.2 HSPF, Ducted
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 9499.10
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_16_9_2_exist: &act_min_eff_heat_mshp_16_9_2_exist
+    option: "HVAC Heating Efficiency|MSHP, SEER 16, 9.2 HSPF, Existing Backup, Max Load"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 16, 9.2 HSPF, Existing Backup, Max Load
+    costs: *cost_mshp_nonducted_seer16_mid_retrofit
+
+  act_min_eff_heat_mshp_16_9_2_max: &act_min_eff_heat_mshp_16_9_2_max
+    option: "HVAC Heating Efficiency|MSHP, SEER 16, 9.2 HSPF, Max Load"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 16, 9.2 HSPF, Max Load
+    costs: *cost_mshp_nonducted_seer16_mid_retrofit
+
+  act_min_eff_heat_mshp_17_9_5: &act_min_eff_heat_mshp_17_9_5
+    option: "HVAC Heating Efficiency|MSHP, SEER 17, 9.5 HSPF"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 17, 9.5 HSPF
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 2075.46
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_17_9_5_ducted: &act_min_eff_heat_mshp_17_9_5_ducted
+    option: "HVAC Heating Efficiency|MSHP, SEER 17, 9.5 HSPF, Ducted"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 17, 9.5 HSPF, Ducted
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 11729.37
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_18_9_6_60: &act_min_eff_heat_mshp_18_9_6_60
+    option: "HVAC Heating Efficiency|MSHP, SEER 18.0, 9.6 HSPF, 60% Conditioned"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 18.0, 9.6 HSPF, 60% Conditioned
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 2316.08
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_18_9_6_60_ducted: &act_min_eff_heat_mshp_18_9_6_60_ducted
+    option: "HVAC Heating Efficiency|MSHP, SEER 18.0, 9.6 HSPF, 60% Conditioned, Ducted"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 18.0, 9.6 HSPF, 60% Conditioned, Ducted
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 12621.48
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_20_11_cchp: &act_min_eff_heat_mshp_20_11_cchp
+    option: "HVAC Heating Efficiency|MSHP, SEER 20, 11 HSPF, CCHP, Max Load"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 20, 11 HSPF, CCHP, Max Load
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 2797.31
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_24_13_max: &act_min_eff_heat_mshp_24_13_max
+    option: "HVAC Heating Efficiency|MSHP, SEER 24, 13 HSPF, Max Load"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 24, 13 HSPF, Max Load
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3759.77
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_25_12_7: &act_min_eff_heat_mshp_25_12_7
+    option: "HVAC Heating Efficiency|MSHP, SEER 25, 12.7 HSPF"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 25, 12.7 HSPF
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 4000.38
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_25_12_7_ducted: &act_min_eff_heat_mshp_25_12_7_ducted
+    option: "HVAC Heating Efficiency|MSHP, SEER 25, 12.7 HSPF, Ducted"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 25, 12.7 HSPF, Ducted
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 18866.25
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_29_3_14: &act_min_eff_heat_mshp_29_3_14
+    option: "HVAC Heating Efficiency|MSHP, SEER 29.3, 14 HSPF"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 29.3, 14 HSPF
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 5035.02
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_29_3_14_ducted: &act_min_eff_heat_mshp_29_3_14_ducted
+    option: "HVAC Heating Efficiency|MSHP, SEER 29.3, 14 HSPF, Ducted"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 29.3, 14 HSPF, Ducted
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 22702.32
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_33_13_3: &act_min_eff_heat_mshp_33_13_3
+    option: "HVAC Heating Efficiency|MSHP, SEER 33, 13.3 HSPF"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 33, 13.3 HSPF
+    costs:
+      - value: 391.26
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 5925.30
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_33_13_3_ducted: &act_min_eff_heat_mshp_33_13_3_ducted
+    option: "HVAC Heating Efficiency|MSHP, SEER 33, 13.3 HSPF, Ducted"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER 33, 13.3 HSPF, Ducted
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 26003.13
+        multiplier: Fixed (1)
+
+  act_min_eff_heat_mshp_cchp_seer2: &act_min_eff_heat_mshp_cchp_seer2
+    option: "HVAC Heating Efficiency|MSHP, SEER2 22.7, 10.3 HSPF2, Typical Cold Climate"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|MSHP, SEER2 22.7, 10.3 HSPF2, Typical Cold Climate
+    costs: *cost_mshp_cchp_mid_retrofit
+
+
+  # Fuel boilers
+  act_min_eff_boiler_80: &act_min_eff_boiler_80
+    option: "HVAC Heating Efficiency|Fuel Boiler, 80% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - or:
+          - Heating Fuel|Natural Gas
+          - Heating Fuel|Propane
+      - or:
+          - HVAC Heating Efficiency|Fuel Boiler, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 80% AFUE
+    costs:
+      - value: 20.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 6466.05
+        multiplier: Fixed (1)
+
+  act_min_eff_boiler_83_oil: &act_min_eff_boiler_83_oil
+    option: "HVAC Heating Efficiency|Fuel Boiler, 83% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - Heating Fuel|Fuel Oil
+      - or:
+          - HVAC Heating Efficiency|Fuel Boiler, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Boiler, 80% AFUE
+    costs:
+      - value: 20.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 5254.13
+        multiplier: Fixed (1)
+
+  act_min_eff_boiler_90_like: &act_min_eff_boiler_90_like
+    option: "HVAC Heating Efficiency|Fuel Boiler, 90% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Fuel Boiler, 90% AFUE
+    costs:
+      - value: 30.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 4336.72
+        multiplier: Fixed (1)
+
+  # Fuel furnaces
+  act_min_eff_furnace_80: &act_min_eff_furnace_80
+    option: "HVAC Heating Efficiency|Fuel Furnace, 80% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - or:
+          - Heating Fuel|Natural Gas
+          - Heating Fuel|Propane
+      - or:
+          - HVAC Heating Efficiency|Fuel Furnace, 60% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 68% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 80% AFUE
+    costs:
+      - value: 10.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 2897.75
+        multiplier: Fixed (1)
+
+  act_min_eff_furnace_83_oil: &act_min_eff_furnace_83_oil
+    option: "HVAC Heating Efficiency|Fuel Furnace, 83% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - Heating Fuel|Fuel Oil
+      - or:
+          - HVAC Heating Efficiency|Fuel Furnace, 60% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 68% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 72% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 76% AFUE
+          - HVAC Heating Efficiency|Fuel Furnace, 80% AFUE
+    costs:
+      - value: 10.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3027.50
+        multiplier: Fixed (1)
+
+  act_min_eff_furnace_92_5_like: &act_min_eff_furnace_92_5_like
+    option: "HVAC Heating Efficiency|Fuel Furnace, 92.5% AFUE"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Heating Efficiency|Fuel Furnace, 92.5% AFUE
+    costs:
+      - value: 10.00
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 3438.38
+        multiplier: Fixed (1)
+
+
+  act_min_eff_ashp_seer2_14_3: &act_min_eff_ashp_seer2_14_3
+    option: "HVAC Heating Efficiency|ASHP, SEER2 14.3, 7.5 HSPF2"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - or:
+          - HVAC Heating Efficiency|ASHP, SEER 10, 6.2 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 10.3, 7.0 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 11.5, 7.5 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 13, 7.7 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 13, 8.0 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 14, 8.2 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 14.3, 8.5 HSPF
+          - HVAC Heating Efficiency|ASHP, SEER 15, 8.5 HSPF
+    costs:
+      - value: 133.16
+        multiplier: Size, Heating System Primary (kBtu/h)
+      - value: 9945.15
+        multiplier: Fixed (1)
+
+
+  act_min_eff_cool_ducted_hp_like: &act_min_eff_cool_ducted_hp_like
+    option: "HVAC Cooling Efficiency|Ducted Heat Pump"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Cooling Efficiency|Ducted Heat Pump
+    costs: *cost_zero
+
+  act_min_eff_cool_nond_ hp_like: &act_min_eff_cool_nond_hp_like
+    option: "HVAC Cooling Efficiency|Non-Ducted Heat Pump"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Cooling Efficiency|Non-Ducted Heat Pump
+    costs: *cost_zero
+
+
+  act_min_eff_cool_ac_seer2_14_3: &act_min_eff_cool_ac_seer2_14_3
+    option: "HVAC Cooling Efficiency|AC, SEER2 14.3"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - and:
+          - or:
+              - State|AL
+              - State|AR
+              - State|DE
+              - State|FL
+              - State|GA
+              - State|HI
+              - State|KY
+              - State|LA
+              - State|MD
+              - State|MS
+              - State|NC
+              - State|OK
+              - State|SC
+              - State|TN
+              - State|TX
+              - State|VA
+              - State|DC
+              - State|AZ
+              - State|CA
+              - State|NV
+              - State|NM
+      - or:
+          - HVAC Cooling Efficiency|AC, SEER 8
+          - HVAC Cooling Efficiency|AC, SEER 10
+          - HVAC Cooling Efficiency|AC, SEER 13
+    costs:
+      - value: 41.04
+        multiplier: Size, Cooling System Primary (kBtu/h)
+      - value: 4548.24
+        multiplier: Fixed (1)
+
+
+  act_min_eff_cool_ac_seer2_13_4: &act_min_eff_cool_ac_seer2_13_4
+    option: "HVAC Cooling Efficiency|AC, SEER2 13.4"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - not:
+          - or:
+              - State|AL
+              - State|AR
+              - State|DE
+              - State|FL
+              - State|GA
+              - State|HI
+              - State|KY
+              - State|LA
+              - State|MD
+              - State|MS
+              - State|NC
+              - State|OK
+              - State|SC
+              - State|TN
+              - State|TX
+              - State|VA
+              - State|DC
+              - State|AZ
+              - State|CA
+              - State|NV
+              - State|NM
+      - or:
+          - HVAC Cooling Efficiency|AC, SEER 8
+          - HVAC Cooling Efficiency|AC, SEER 10
+          - HVAC Cooling Efficiency|AC, SEER 13
+    costs:
+      - value: 41.04
+        multiplier: Size, Cooling System Primary (kBtu/h)
+      - value: 3656.13
+        multiplier: Fixed (1)
+
+
+  act_min_eff_cool_ac_seer_15_like: &act_min_eff_cool_ac_seer_15_like
+    option: "HVAC Cooling Efficiency|AC, SEER 15"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - HVAC Cooling Efficiency|AC, SEER 15
+    costs:
+      - value: 41.04
+        multiplier: Size, Cooling System Primary (kBtu/h)
+      - value: 4548.24
+        multiplier: Fixed (1)
+
+
+  act_min_eff_cool_room_ac_eer_12: &act_min_eff_cool_room_ac_eer_12
+    option: "HVAC Cooling Efficiency|Room AC, EER 12.0"
+    apply_logic:
+      - *logic_min_eff_hvac
+      - or:
+          - HVAC Cooling Efficiency|Room AC, EER 8.5
+          - HVAC Cooling Efficiency|Room AC, EER 9.8
+          - HVAC Cooling Efficiency|Room AC, EER 10.7
+          - HVAC Cooling Efficiency|Room AC, EER 12.0
+    costs:
+      - value: 30.36
+        multiplier: Size, Cooling System Primary (kBtu/h)
+      - value: 438.73
+        multiplier: Fixed (1)
+
+
+  pkg_min_eff_hvac: &pkg_min_eff_hvac
+    # Heating 1.1 like-for-like
+    - *act_min_eff_heat_elec_furnace_like
+    - *act_min_eff_heat_elec_boiler_like
+    - *act_min_eff_heat_elec_baseboard_like
+    - *act_min_eff_heat_elec_wallfurn_like
+    - *act_min_eff_heat_wallfurn_60_like
+    - *act_min_eff_heat_wallfurn_68_like
+    - *act_min_eff_heat_gshp_18_6
+    - *act_min_eff_heat_gshp_20_5
+    - *act_min_eff_heat_gshp_30_9
+    - *act_min_eff_heat_mshp_14_5_8_2
+    - *act_min_eff_heat_mshp_14_5_8_2_ducted
+    - *act_min_eff_heat_mshp_16_9_2_exist
+    - *act_min_eff_heat_mshp_16_9_2_max
+    - *act_min_eff_heat_mshp_17_9_5
+    - *act_min_eff_heat_mshp_17_9_5_ducted
+    - *act_min_eff_heat_mshp_18_9_6_60
+    - *act_min_eff_heat_mshp_18_9_6_60_ducted
+    - *act_min_eff_heat_mshp_20_11_cchp
+    - *act_min_eff_heat_mshp_24_13_max
+    - *act_min_eff_heat_mshp_25_12_7
+    - *act_min_eff_heat_mshp_25_12_7_ducted
+    - *act_min_eff_heat_mshp_29_3_14
+    - *act_min_eff_heat_mshp_29_3_14_ducted
+    - *act_min_eff_heat_mshp_33_13_3
+    - *act_min_eff_heat_mshp_33_13_3_ducted
+    - *act_min_eff_heat_mshp_cchp_seer2
+
+
+    - *act_min_eff_boiler_80
+    - *act_min_eff_boiler_83_oil
+    - *act_min_eff_boiler_90_like
+    - *act_min_eff_furnace_80
+    - *act_min_eff_furnace_83_oil
+    - *act_min_eff_furnace_92_5_like
+    - *act_min_eff_ashp_seer2_14_3
+
+    # Cooling 2.1 like-for-like
+    - *act_min_eff_cool_ducted_hp_like
+    - *act_min_eff_cool_nond_hp_like
+
+
+    - *act_min_eff_cool_ac_seer2_14_3
+    - *act_min_eff_cool_ac_seer2_13_4
+    - *act_min_eff_cool_ac_seer_15_like
+    - *act_min_eff_cool_room_ac_eer_12
+
+######## PV and Battery ##########################################################
+
+
+  logic_occ_small: &logic_occ_small
+    or:
+      - Occupants|0
+      - Occupants|1
+      - Occupants|2
+
+  logic_occ_medium: &logic_occ_medium
+    or:
+      - Occupants|3
+      - Occupants|4
+      - Occupants|5
+
+  logic_occ_large: &logic_occ_large
+    or:
+      - Occupants|6
+      - Occupants|7
+      - Occupants|8
+      - Occupants|9
+      - Occupants|10+
+
+  # --- Tier A PV (3-5-7kW) ---
+  act_pv_smart_3k: &act_pv_smart_3k
+    option: "PV System Size|3.0 kWDC"
+    apply_logic:
+      - *logic_occ_small
+      - PV System Size|None
+    costs:
+      - value: 11677.63
+        multiplier: Fixed (1)
+
+  act_pv_smart_5k: &act_pv_smart_5k
+    option: "PV System Size|5.0 kWDC"
+    apply_logic:
+      - *logic_occ_medium
+      - PV System Size|None
+    costs:
+      - value: 17624.51
+        multiplier: Fixed (1)
+
+  act_pv_smart_7k: &act_pv_smart_7k
+    option: "PV System Size|7.0 kWDC"
+    apply_logic:
+      - *logic_occ_large
+      - PV System Size|None
+    costs:
+      - value: 22100.83
+        multiplier: Fixed (1)
+
+  # --- Tier B PV (9-11-13kW) ---
+  act_pv_smart_9k: &act_pv_smart_9k
+    option: "PV System Size|9.0 kWDC"
+    apply_logic:
+      - *logic_occ_small
+      - PV System Size|None
+    costs:
+      - value: 25106.60
+        multiplier: Fixed (1)
+
+  act_pv_smart_11k: &act_pv_smart_11k
+    option: "PV System Size|11.0 kWDC"
+    apply_logic:
+      - *logic_occ_medium
+      - PV System Size|None
+    costs:
+      - value: 26641.80
+        multiplier: Fixed (1)
+
+  act_pv_smart_13k: &act_pv_smart_13k
+    option: "PV System Size|13.0 kWDC"
+    apply_logic:
+      - *logic_occ_large
+      - PV System Size|None
+    costs:
+      - value: 26706.45
+        multiplier: Fixed (1)
+
+
+  act_pv_ensure_yes: &act_pv_ensure_yes
+    option: "Has PV|Yes"
+    apply_logic:
+      - PV System Size|None
+
+
+  act_battery_10k_fixed: &act_battery_10kwh
+    option: "Battery|10 kWh"
+    apply_logic:
+      - Battery|None
+    costs:
+      - value: 11491.45
+        multiplier: Fixed (1)
+
+  act_battery_20k_fixed: &act_battery_20kwh
+    option: "Battery|20 kWh, 80% Round Trip Efficiency"
+    apply_logic:
+      or:
+        - Battery|None
+        - Battery|10 kWh
+    costs:
+      - value: 21663.45
+        multiplier: Fixed (1)
+
+
+  pkg_pv_tier_a_smart: &pkg_pv_tier_a_smart
+    - *act_pv_smart_3k
+    - *act_pv_smart_5k
+    - *act_pv_smart_7k
+    - *act_pv_ensure_yes
+
+
+  pkg_pv_tier_b_smart: &pkg_pv_tier_b_smart
+    - *act_pv_smart_9k
+    - *act_pv_smart_11k
+    - *act_pv_smart_13k
+    - *act_pv_ensure_yes
+
+
+  pkg_battery_10k: &pkg_battery_10kwh
+    - *act_battery_10kwh
+
+
+  pkg_battery_20k: &pkg_battery_20kwh
+    - *act_battery_20kwh
+
+# ######## Setpoint Adjustments ##################################################
+
+
+#       - Heating Setpoint|60F
+#       - Heating Setpoint|62F
+#       - Heating Setpoint|65F
+
+
+#       - Cooling Setpoint|76F
+#       - Cooling Setpoint|78F
+#       - Cooling Setpoint|80F
+
+
+#     - option: Heating Setpoint|68F
+
+#         - *logic_heat_below_20c
+#     - option: Cooling Setpoint|75F
+
+#         - *logic_cool_above_24c
+
+
+#     - *act_set_heat_20c
+#     - *act_set_cool_24c
+
+
+  # - upgrade_name: Insulation Plus 1 (IECC Capped)
+
+
+  # - upgrade_name: Insulation Plus 2 (IECC Capped)
+
+
+  # - upgrade_name: Insulation IECC 2021 Compliance
+
+
+  # - upgrade_name: Windows Best-in-Class
+
+
+  # - upgrade_name: Windows Energy Star Standard  # include airtighteness improvenemnt
+
+
+  # - upgrade_name: Windows Energy Star Standard_non_airtightness  # exclude airtighteness improvenemnt
+
+
+  # - upgrade_name: Infiltration Reduce 13% (If > 10 ACH50)
+
+
+  # - upgrade_name: Infiltration Reduce 20% (If > 10 ACH50)
+
+
+  # - upgrade_name: Infiltration Reduce 30% (If > 10 ACH50)
+
+
+  # - upgrade_name: Infiltration IECC Compliance (Target 5 ACH50)
+
+
+  # - upgrade_name: Wall Insulation - Step Up (+1 Level)
+
+
+  # - upgrade_name: Wall Insulation - Step Up (+2 Levels)
+
+
+  # - upgrade_name: Wall Insulation - IECC 2021
+
+
+  # - upgrade_name: Dual Fuel commonly electrify
+
+
+  # - upgrade_name: Typical Cold Climate ASHP
+
+
+  # - upgrade_name: High-Efficiency Fossil Furnaces
+
+
+  # - upgrade_name: mini efficiency
+
+
+  # - upgrade_name: PV Smart Sizing Tier A (3-5-7kW)
+
+
+  # - upgrade_name: PV Smart Sizing Tier B (9-11-13kW)
+
+
+  # - upgrade_name: Battery Storage 10kWh
+
+
+  # - upgrade_name: Battery Storage 20kWh
+
+
+upgrades:
+
+
+  - upgrade_name: Upgrade1_Wall_Maintenance
+    options:
+      - *act_brick_u1_to_r7
+      - *act_brick_u1_to_r11
+      - *act_brick_u1_to_r15
+      - *act_brick_u1_to_r19
+      - *act_cmu_u1_to_r7
+      - *act_cmu_u1_to_r11
+      - *act_cmu_u1_r11_to_r15
+      - *act_cmu_u1_r10_to_r15
+      - *act_cmu_u1_to_r19
+      - *act_wood_u1_to_r7
+      - *act_wood_u1_r7_to_r13
+      - *act_wood_u1_r11_to_r13
+      - *act_wood_u1_r13_to_r19
+      - *act_wood_u1_r15_to_r19
+      - *act_wood_u1_to_plus5
+      - *act_steel_u1_to_r13
+      - *act_steel_u1_to_r25
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade2_Wall_Maintenance_HVAC_Replace
+    options:
+      # --- Wall Update 1 ---
+      - *act_brick_u1_to_r7
+      - *act_brick_u1_to_r11
+      - *act_brick_u1_to_r15
+      - *act_brick_u1_to_r19
+      - *act_cmu_u1_to_r7
+      - *act_cmu_u1_to_r11
+      - *act_cmu_u1_r11_to_r15
+      - *act_cmu_u1_r10_to_r15
+      - *act_cmu_u1_to_r19
+      - *act_wood_u1_to_r7
+      - *act_wood_u1_r7_to_r13
+      - *act_wood_u1_r11_to_r13
+      - *act_wood_u1_r13_to_r19
+      - *act_wood_u1_r15_to_r19
+      - *act_wood_u1_to_plus5
+      - *act_steel_u1_to_r13
+      - *act_steel_u1_to_r25
+      # --- Min Efficiency HVAC ---
+      - *act_min_eff_heat_elec_furnace_like
+      - *act_min_eff_heat_elec_boiler_like
+      - *act_min_eff_heat_elec_baseboard_like
+      - *act_min_eff_heat_elec_wallfurn_like
+      - *act_min_eff_heat_wallfurn_60_like
+      - *act_min_eff_heat_wallfurn_68_like
+      - *act_min_eff_heat_gshp_18_6
+      - *act_min_eff_heat_gshp_20_5
+      - *act_min_eff_heat_gshp_30_9
+      - *act_min_eff_heat_mshp_14_5_8_2
+      - *act_min_eff_heat_mshp_14_5_8_2_ducted
+      - *act_min_eff_heat_mshp_16_9_2_exist
+      - *act_min_eff_heat_mshp_16_9_2_max
+      - *act_min_eff_heat_mshp_17_9_5
+      - *act_min_eff_heat_mshp_17_9_5_ducted
+      - *act_min_eff_heat_mshp_18_9_6_60
+      - *act_min_eff_heat_mshp_18_9_6_60_ducted
+      - *act_min_eff_heat_mshp_20_11_cchp
+      - *act_min_eff_heat_mshp_24_13_max
+      - *act_min_eff_heat_mshp_25_12_7
+      - *act_min_eff_heat_mshp_25_12_7_ducted
+      - *act_min_eff_heat_mshp_29_3_14
+      - *act_min_eff_heat_mshp_29_3_14_ducted
+      - *act_min_eff_heat_mshp_33_13_3
+      - *act_min_eff_heat_mshp_33_13_3_ducted
+      - *act_min_eff_heat_mshp_cchp_seer2
+      - *act_min_eff_boiler_80
+      - *act_min_eff_boiler_83_oil
+      - *act_min_eff_boiler_90_like
+      - *act_min_eff_furnace_80
+      - *act_min_eff_furnace_83_oil
+      - *act_min_eff_furnace_92_5_like
+      - *act_min_eff_ashp_seer2_14_3
+      - *act_min_eff_cool_ducted_hp_like
+      - *act_min_eff_cool_nond_hp_like
+      - *act_min_eff_cool_ac_seer2_14_3
+      - *act_min_eff_cool_ac_seer2_13_4
+      - *act_min_eff_cool_ac_seer_15_like
+      - *act_min_eff_cool_room_ac_eer_12
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade3_Full_Maintenance_Infil13
+    options:
+      # --- Roof Plus 1 ---
+      - *s1_ceil_to_r13
+      - *s1_ceil_to_r19
+      - *s1_ceil_to_r30
+      - *s1_ceil_to_r38
+      - *s1_ceil_to_r49
+      - *s1_ceil_to_r60
+      - *s1_ceil_maintain_z1_cap
+      - *s1_ceil_maintain_z23_cap
+      - *s1_ceil_maintain_max
+      - *s1_roof_unins_to_r13
+      - *s1_roof_r7_to_r13
+      - *s1_roof_to_r19
+      - *s1_roof_to_r30
+      - *s1_roof_to_r38
+      - *s1_roof_to_r49
+      - *s1_roof_maintain_z1_cap
+      - *s1_roof_maintain_max
+      # --- Wall Update 1 ---
+      - *act_brick_u1_to_r7
+      - *act_brick_u1_to_r11
+      - *act_brick_u1_to_r15
+      - *act_brick_u1_to_r19
+      - *act_cmu_u1_to_r7
+      - *act_cmu_u1_to_r11
+      - *act_cmu_u1_r11_to_r15
+      - *act_cmu_u1_r10_to_r15
+      - *act_cmu_u1_to_r19
+      - *act_wood_u1_to_r7
+      - *act_wood_u1_r7_to_r13
+      - *act_wood_u1_r11_to_r13
+      - *act_wood_u1_r13_to_r19
+      - *act_wood_u1_r15_to_r19
+      - *act_wood_u1_to_plus5
+      - *act_steel_u1_to_r13
+      - *act_steel_u1_to_r25
+      # --- Infiltration Reduce 13% ---
+      - *action_reduce_13_gt_10
+      # --- Min Efficiency HVAC ---
+      - *act_min_eff_heat_elec_furnace_like
+      - *act_min_eff_heat_elec_boiler_like
+      - *act_min_eff_heat_elec_baseboard_like
+      - *act_min_eff_heat_elec_wallfurn_like
+      - *act_min_eff_heat_wallfurn_60_like
+      - *act_min_eff_heat_wallfurn_68_like
+      - *act_min_eff_heat_gshp_18_6
+      - *act_min_eff_heat_gshp_20_5
+      - *act_min_eff_heat_gshp_30_9
+      - *act_min_eff_heat_mshp_14_5_8_2
+      - *act_min_eff_heat_mshp_14_5_8_2_ducted
+      - *act_min_eff_heat_mshp_16_9_2_exist
+      - *act_min_eff_heat_mshp_16_9_2_max
+      - *act_min_eff_heat_mshp_17_9_5
+      - *act_min_eff_heat_mshp_17_9_5_ducted
+      - *act_min_eff_heat_mshp_18_9_6_60
+      - *act_min_eff_heat_mshp_18_9_6_60_ducted
+      - *act_min_eff_heat_mshp_20_11_cchp
+      - *act_min_eff_heat_mshp_24_13_max
+      - *act_min_eff_heat_mshp_25_12_7
+      - *act_min_eff_heat_mshp_25_12_7_ducted
+      - *act_min_eff_heat_mshp_29_3_14
+      - *act_min_eff_heat_mshp_29_3_14_ducted
+      - *act_min_eff_heat_mshp_33_13_3
+      - *act_min_eff_heat_mshp_33_13_3_ducted
+      - *act_min_eff_heat_mshp_cchp_seer2
+      - *act_min_eff_boiler_80
+      - *act_min_eff_boiler_83_oil
+      - *act_min_eff_boiler_90_like
+      - *act_min_eff_furnace_80
+      - *act_min_eff_furnace_83_oil
+      - *act_min_eff_furnace_92_5_like
+      - *act_min_eff_ashp_seer2_14_3
+      - *act_min_eff_cool_ducted_hp_like
+      - *act_min_eff_cool_nond_hp_like
+      - *act_min_eff_cool_ac_seer2_14_3
+      - *act_min_eff_cool_ac_seer2_13_4
+      - *act_min_eff_cool_ac_seer_15_like
+      - *act_min_eff_cool_room_ac_eer_12
+
+
+  - upgrade_name: Upgrade4_Light_Roof_HVAC
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Infil 13%
+      - *action_reduce_13_gt_10
+      # Min Efficiency HVAC
+      - *act_min_eff_heat_elec_furnace_like
+      - *act_min_eff_heat_elec_boiler_like
+      - *act_min_eff_heat_elec_baseboard_like
+      - *act_min_eff_heat_elec_wallfurn_like
+      - *act_min_eff_heat_wallfurn_60_like
+      - *act_min_eff_heat_wallfurn_68_like
+      - *act_min_eff_heat_gshp_18_6
+      - *act_min_eff_heat_gshp_20_5
+      - *act_min_eff_heat_gshp_30_9
+      - *act_min_eff_heat_mshp_14_5_8_2
+      - *act_min_eff_heat_mshp_14_5_8_2_ducted
+      - *act_min_eff_heat_mshp_16_9_2_exist
+      - *act_min_eff_heat_mshp_16_9_2_max
+      - *act_min_eff_heat_mshp_17_9_5
+      - *act_min_eff_heat_mshp_17_9_5_ducted
+      - *act_min_eff_heat_mshp_18_9_6_60
+      - *act_min_eff_heat_mshp_18_9_6_60_ducted
+      - *act_min_eff_heat_mshp_20_11_cchp
+      - *act_min_eff_heat_mshp_24_13_max
+      - *act_min_eff_heat_mshp_25_12_7
+      - *act_min_eff_heat_mshp_25_12_7_ducted
+      - *act_min_eff_heat_mshp_29_3_14
+      - *act_min_eff_heat_mshp_29_3_14_ducted
+      - *act_min_eff_heat_mshp_33_13_3
+      - *act_min_eff_heat_mshp_33_13_3_ducted
+      - *act_min_eff_heat_mshp_cchp_seer2
+      - *act_min_eff_boiler_80
+      - *act_min_eff_boiler_83_oil
+      - *act_min_eff_boiler_90_like
+      - *act_min_eff_furnace_80
+      - *act_min_eff_furnace_83_oil
+      - *act_min_eff_furnace_92_5_like
+      - *act_min_eff_ashp_seer2_14_3
+      - *act_min_eff_cool_ducted_hp_like
+      - *act_min_eff_cool_nond_hp_like
+      - *act_min_eff_cool_ac_seer2_14_3
+      - *act_min_eff_cool_ac_seer2_13_4
+      - *act_min_eff_cool_ac_seer_15_like
+      - *act_min_eff_cool_room_ac_eer_12
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade5_Light_Wall_HVAC
+    options:
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # Min Efficiency HVAC
+      - *act_min_eff_heat_elec_furnace_like
+      - *act_min_eff_heat_elec_boiler_like
+      - *act_min_eff_heat_elec_baseboard_like
+      - *act_min_eff_heat_elec_wallfurn_like
+      - *act_min_eff_heat_wallfurn_60_like
+      - *act_min_eff_heat_wallfurn_68_like
+      - *act_min_eff_heat_gshp_18_6
+      - *act_min_eff_heat_gshp_20_5
+      - *act_min_eff_heat_gshp_30_9
+      - *act_min_eff_heat_mshp_14_5_8_2
+      - *act_min_eff_heat_mshp_14_5_8_2_ducted
+      - *act_min_eff_heat_mshp_16_9_2_exist
+      - *act_min_eff_heat_mshp_16_9_2_max
+      - *act_min_eff_heat_mshp_17_9_5
+      - *act_min_eff_heat_mshp_17_9_5_ducted
+      - *act_min_eff_heat_mshp_18_9_6_60
+      - *act_min_eff_heat_mshp_18_9_6_60_ducted
+      - *act_min_eff_heat_mshp_20_11_cchp
+      - *act_min_eff_heat_mshp_24_13_max
+      - *act_min_eff_heat_mshp_25_12_7
+      - *act_min_eff_heat_mshp_25_12_7_ducted
+      - *act_min_eff_heat_mshp_29_3_14
+      - *act_min_eff_heat_mshp_29_3_14_ducted
+      - *act_min_eff_heat_mshp_33_13_3
+      - *act_min_eff_heat_mshp_33_13_3_ducted
+      - *act_min_eff_heat_mshp_cchp_seer2
+      - *act_min_eff_boiler_80
+      - *act_min_eff_boiler_83_oil
+      - *act_min_eff_boiler_90_like
+      - *act_min_eff_furnace_80
+      - *act_min_eff_furnace_83_oil
+      - *act_min_eff_furnace_92_5_like
+      - *act_min_eff_ashp_seer2_14_3
+      - *act_min_eff_cool_ducted_hp_like
+      - *act_min_eff_cool_nond_hp_like
+      - *act_min_eff_cool_ac_seer2_14_3
+      - *act_min_eff_cool_ac_seer2_13_4
+      - *act_min_eff_cool_ac_seer_15_like
+      - *act_min_eff_cool_room_ac_eer_12
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade6_Light_Roof_Wall_HVAC
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # Min Efficiency HVAC
+      - *act_min_eff_heat_elec_furnace_like
+      - *act_min_eff_heat_elec_boiler_like
+      - *act_min_eff_heat_elec_baseboard_like
+      - *act_min_eff_heat_elec_wallfurn_like
+      - *act_min_eff_heat_wallfurn_60_like
+      - *act_min_eff_heat_wallfurn_68_like
+      - *act_min_eff_heat_gshp_18_6
+      - *act_min_eff_heat_gshp_20_5
+      - *act_min_eff_heat_gshp_30_9
+      - *act_min_eff_heat_mshp_14_5_8_2
+      - *act_min_eff_heat_mshp_14_5_8_2_ducted
+      - *act_min_eff_heat_mshp_16_9_2_exist
+      - *act_min_eff_heat_mshp_16_9_2_max
+      - *act_min_eff_heat_mshp_17_9_5
+      - *act_min_eff_heat_mshp_17_9_5_ducted
+      - *act_min_eff_heat_mshp_18_9_6_60
+      - *act_min_eff_heat_mshp_18_9_6_60_ducted
+      - *act_min_eff_heat_mshp_20_11_cchp
+      - *act_min_eff_heat_mshp_24_13_max
+      - *act_min_eff_heat_mshp_25_12_7
+      - *act_min_eff_heat_mshp_25_12_7_ducted
+      - *act_min_eff_heat_mshp_29_3_14
+      - *act_min_eff_heat_mshp_29_3_14_ducted
+      - *act_min_eff_heat_mshp_33_13_3
+      - *act_min_eff_heat_mshp_33_13_3_ducted
+      - *act_min_eff_heat_mshp_cchp_seer2
+      - *act_min_eff_boiler_80
+      - *act_min_eff_boiler_83_oil
+      - *act_min_eff_boiler_90_like
+      - *act_min_eff_furnace_80
+      - *act_min_eff_furnace_83_oil
+      - *act_min_eff_furnace_92_5_like
+      - *act_min_eff_ashp_seer2_14_3
+      - *act_min_eff_cool_ducted_hp_like
+      - *act_min_eff_cool_nond_hp_like
+      - *act_min_eff_cool_ac_seer2_14_3
+      - *act_min_eff_cool_ac_seer2_13_4
+      - *act_min_eff_cool_ac_seer_15_like
+      - *act_min_eff_cool_room_ac_eer_12
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade7_Light_FullEnvelope_HVAC
+    options:
+      # Windows Best-in-Class
+      - *win_upgrade_single_best
+      - *win_upgrade_double_clear_best
+      - *win_upgrade_double_lowe_best
+      - *win_upgrade_triple_best
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # Min Efficiency HVAC
+      - *act_min_eff_heat_elec_furnace_like
+      - *act_min_eff_heat_elec_boiler_like
+      - *act_min_eff_heat_elec_baseboard_like
+      - *act_min_eff_heat_elec_wallfurn_like
+      - *act_min_eff_heat_wallfurn_60_like
+      - *act_min_eff_heat_wallfurn_68_like
+      - *act_min_eff_heat_gshp_18_6
+      - *act_min_eff_heat_gshp_20_5
+      - *act_min_eff_heat_gshp_30_9
+      - *act_min_eff_heat_mshp_14_5_8_2
+      - *act_min_eff_heat_mshp_14_5_8_2_ducted
+      - *act_min_eff_heat_mshp_16_9_2_exist
+      - *act_min_eff_heat_mshp_16_9_2_max
+      - *act_min_eff_heat_mshp_17_9_5
+      - *act_min_eff_heat_mshp_17_9_5_ducted
+      - *act_min_eff_heat_mshp_18_9_6_60
+      - *act_min_eff_heat_mshp_18_9_6_60_ducted
+      - *act_min_eff_heat_mshp_20_11_cchp
+      - *act_min_eff_heat_mshp_24_13_max
+      - *act_min_eff_heat_mshp_25_12_7
+      - *act_min_eff_heat_mshp_25_12_7_ducted
+      - *act_min_eff_heat_mshp_29_3_14
+      - *act_min_eff_heat_mshp_29_3_14_ducted
+      - *act_min_eff_heat_mshp_33_13_3
+      - *act_min_eff_heat_mshp_33_13_3_ducted
+      - *act_min_eff_heat_mshp_cchp_seer2
+      - *act_min_eff_boiler_80
+      - *act_min_eff_boiler_83_oil
+      - *act_min_eff_boiler_90_like
+      - *act_min_eff_furnace_80
+      - *act_min_eff_furnace_83_oil
+      - *act_min_eff_furnace_92_5_like
+      - *act_min_eff_ashp_seer2_14_3
+      - *act_min_eff_cool_ducted_hp_like
+      - *act_min_eff_cool_nond_hp_like
+      - *act_min_eff_cool_ac_seer2_14_3
+      - *act_min_eff_cool_ac_seer2_13_4
+      - *act_min_eff_cool_ac_seer_15_like
+      - *act_min_eff_cool_room_ac_eer_12
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade8_Light_Roof_Elec
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Infil 13%
+      - *action_reduce_13_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade9_Light_Wall_Elec
+    options:
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade10_Light_Roof_Wall_Elec
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade11_Light_FullEnvelope_Elec
+    options:
+      # Windows Best
+      - *win_upgrade_single_best
+      - *win_upgrade_double_clear_best
+      - *win_upgrade_double_lowe_best
+      - *win_upgrade_triple_best
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade12_Light_Roof_Elec_PV5
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Infil 13%
+      - *action_reduce_13_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade13_Light_Wall_Elec_PV5
+    options:
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade14_Light_Roof_Wall_Elec_PV5
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade15_Light_FullEnvelope_Elec_PV5
+    options:
+      # Windows Best
+      - *win_upgrade_single_best
+      - *win_upgrade_double_clear_best
+      - *win_upgrade_double_lowe_best
+      - *win_upgrade_triple_best
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade16_Light_Roof_Elec_PV5_B10
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Infil 13%
+      - *action_reduce_13_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      # Battery 10kWh
+      - *act_battery_10kwh
+
+
+  - upgrade_name: Upgrade17_Light_Wall_Elec_PV5_B10
+    options:
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      # Battery 10kWh
+      - *act_battery_10kwh
+
+
+  - upgrade_name: Upgrade18_Light_Roof_Wall_Elec_PV5_B10
+    options:
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      - *act_steel_u2_r13_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      # Battery 10kWh
+      - *act_battery_10kwh
+
+
+  - upgrade_name: Upgrade19_Light_FullEnvelope_Elec_PV5_B10
+    options:
+      # Windows Best
+      - *win_upgrade_single_best
+      - *win_upgrade_double_clear_best
+      - *win_upgrade_double_lowe_best
+      - *win_upgrade_triple_best
+      # Roof Plus 2
+      - *s2_ceil_to_r19
+      - *s2_ceil_to_r30
+      - *s2_ceil_to_r38
+      - *s2_ceil_cap_z1
+      - *s2_ceil_to_r49
+      - *s2_ceil_maintain_z1
+      - *s2_ceil_to_r60
+      - *s2_ceil_cap_z23
+      - *s2_ceil_cap_max
+      - *s2_ceil_maintain_z23
+      - *s2_ceil_maintain_all_max
+      - *s2_roof_unins_to_r19
+      - *s2_roof_r7_to_r19
+      - *s2_roof_to_r30
+      - *s2_roof_to_r38
+      - *s2_roof_cap_z1
+      - *s2_roof_to_r49
+      - *s2_roof_maintain_z1
+      - *s2_roof_cap_max
+      - *s2_roof_maintain_max
+      # Wall Plus 2
+      - *act_brick_u2_to_r11
+      - *act_brick_u2_to_r15
+      - *act_brick_u2_to_r19
+      - *act_brick_u2_cap_r19
+      - *act_cmu_u2_to_r11
+      - *act_cmu_u2_to_r15
+      - *act_cmu_u2_r11_to_r19
+      - *act_cmu_u2_r10_to_r19
+      - *act_cmu_u2_cap_r19
+      - *act_wood_u2_to_r13
+      - *act_wood_u2_r7_to_r19
+      - *act_wood_u2_r11_to_r19
+      - *act_wood_u2_r13_to_plus5
+      - *act_wood_u2_r15_to_plus5
+      - *act_wood_u2_cap_plus5
+      - *act_steel_u2_uninsulated_to_r25
+      # Infil 20%
+      - *action_reduce_20_gt_10
+      # HVAC Common Electrification
+      - *act_df_autosize_heat
+      - *act_df_autosize_cool
+      - *act_df_cold_eff
+      - *act_df_warm_eff
+      - *act_df_cool_eff
+      - *act_df_global_cond
+      - *act_mshp_autosize
+      - *act_mshp_eff
+      - *act_mshp_type_heat
+      - *act_mshp_type_cool
+      - *act_mshp_eff_cool
+      - *act_mshp_fuel
+      - *act_mshp_global_cond
+      # PV 5kW
+      - *act_pv_smart_3k
+      - *act_pv_smart_5k
+      - *act_pv_smart_7k
+      - *act_pv_ensure_yes
+      # Battery 10kWh
+      - *act_battery_10kwh
+
+
+  - upgrade_name: Upgrade20_Deep_WinIECC_Fossil
+    options:
+      # Windows Energy Star
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      # - *es_maintain_high_perf
+      - *infil_red_30_single
+      - *infil_red_13_others
+      # Fossil High Eff All
+      - *act_furnace_ng_95
+      - *act_furnace_propane_95
+      - *act_furnace_fueloil_88
+      - *act_wallfurnace_ng_68
+      - *act_wallfurnace_propane_68
+      - *act_wallfurnace_fueloil_68
+      - *act_boiler_ng_95
+      - *act_boiler_propane_95
+      - *act_boiler_fueloil_95
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade21_Deep_RoofIECC_Fossil
+    options:
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Fossil High Eff All
+      - *act_furnace_ng_95
+      - *act_furnace_propane_95
+      - *act_furnace_fueloil_88
+      - *act_wallfurnace_ng_68
+      - *act_wallfurnace_propane_68
+      - *act_wallfurnace_fueloil_68
+      - *act_boiler_ng_95
+      - *act_boiler_propane_95
+      - *act_boiler_fueloil_95
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade22_Deep_WallIECC_Fossil
+    options:
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Fossil High Eff All
+      - *act_furnace_ng_95
+      - *act_furnace_propane_95
+      - *act_furnace_fueloil_88
+      - *act_wallfurnace_ng_68
+      - *act_wallfurnace_propane_68
+      - *act_wallfurnace_fueloil_68
+      - *act_boiler_ng_95
+      - *act_boiler_propane_95
+      - *act_boiler_fueloil_95
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade23_Deep_EnvelopeIECC_Fossil
+    options:
+      # Windows Non-Airtightness
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      # - *es_maintain_high_perf
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil Target ACH5
+      - *action_target_5_iecc
+      # Fossil High Eff All
+      - *act_furnace_ng_95
+      - *act_furnace_propane_95
+      - *act_furnace_fueloil_88
+      - *act_wallfurnace_ng_68
+      - *act_wallfurnace_propane_68
+      - *act_wallfurnace_fueloil_68
+      - *act_boiler_ng_95
+      - *act_boiler_propane_95
+      - *act_boiler_fueloil_95
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade24_Deep_WinIECC_CCHP
+    options:
+      # Windows Energy Star
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      # - *es_maintain_high_perf
+      - *infil_red_30_single
+      - *infil_red_13_others
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade25_Deep_RoofIECC_CCHP
+    options:
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade26_Deep_WallIECC_CCHP
+    options:
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade27_Deep_EnvelopeIECC_CCHP
+    options:
+      # Windows Non-Airtightness
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      # - *es_maintain_high_perf
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil Target ACH5
+      - *action_target_5_iecc
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade28_Deep_WinIECC_CCHP_PV11
+    options:
+      # Windows Energy Star
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      #- *es_maintain_high_perf
+      - *infil_red_30_single
+      - *infil_red_13_others
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade29_Deep_RoofIECC_CCHP_PV11
+    options:
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade30_Deep_WallIECC_CCHP_PV11
+    options:
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      - option: County Outage|ssp126 2020s
+
+  - upgrade_name: Upgrade31_Deep_EnvelopeIECC_CCHP_PV11
+    options:
+      # Windows Non-Airtightness
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      #- *es_maintain_high_perf
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil Target ACH5
+      - *action_target_5_iecc
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+
+
+  - upgrade_name: Upgrade32_Deep_WinIECC_CCHP_PV11_B20
+    options:
+      # Windows Energy Star
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      #- *es_maintain_high_perf
+      - *infil_red_30_single
+      - *infil_red_13_others
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      # Battery 20kWh
+      - *act_battery_20kwh
+
+
+  - upgrade_name: Upgrade33_Deep_RoofIECC_CCHP_PV11_B20
+    options:
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      # Battery 20kWh
+      - *act_battery_20kwh
+
+
+  - upgrade_name: Upgrade34_Deep_WallIECC_CCHP_PV11_B20
+    options:
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil 30%
+      - *action_reduce_30_gt_10
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      # Battery 20kWh
+      - *act_battery_20kwh
+
+
+  - upgrade_name: Upgrade35_Deep_FullIECC_CCHP_PV11_B20
+    options:
+      # Windows Non-Airtightness
+      - *es_window_northern
+      - *es_window_north_central
+      - *es_window_south_central
+      - *es_window_southern
+      # - *es_maintain_high_perf
+      # Roof IECC
+      - *s3_iecc_cz1_roof_unins_to_r30
+      - *s3_iecc_cz1_roof_r7_to_r30
+      - *s3_iecc_cz1_roof_r13_to_r30
+      - *s3_iecc_cz1_roof_r19_to_r30
+      - *s3_iecc_cz1_roof_maintain_r30
+      # - *s3_iecc_cz1_ceil_maintain_high
+      # - *s3_iecc_cz1_roof_maintain_high
+      - *s3_iecc_cz2_8_ceil
+      - *s3_iecc_cz2_8_roof_unins_to_r49
+      - *s3_iecc_cz2_8_roof_r7_to_r49
+      - *s3_iecc_cz2_8_roof_r13_to_r49
+      - *s3_iecc_cz2_8_roof_r19_to_r49
+      - *s3_iecc_cz2_8_roof_r30_to_r49
+      - *s3_iecc_cz2_8_roof_r38_to_r49
+      - *s3_iecc_cz2_8_roof_maintain_r49
+      # Wall IECC
+      - *act_iecc_z12_unins_to_r13
+      - *act_iecc_z12_r7_to_r13
+      - *act_iecc_z12_r11_to_r13
+      - *act_iecc_z3_unins_to_r19
+      - *act_iecc_z3_r7_to_r19
+      - *act_iecc_z3_r11_to_r19
+      - *act_iecc_z3_r13_to_r19
+      - *act_iecc_z3_r15_to_r19
+      - *act_iecc_z48_unins_to_r19_r5
+      - *act_iecc_z48_r7_to_r19_r5
+      - *act_iecc_z48_r11_to_r19_r5
+      - *act_iecc_z48_r13_to_r19_r5
+      - *act_iecc_z48_r15_to_r19_r5
+      - *act_iecc_z48_r19_to_r19_r5
+      # Infil Target ACH5
+      - *action_target_5_iecc
+      # Deep CCHP
+      - *act_cchp_ducted_eff
+      - *act_cchp_ducted_perf
+      - *act_cchp_ducted_cool_eff
+      - *act_cchp_ducted_cool_fraction
+      - *act_cchp_ducted_fuel
+      - *act_cchp_ducted_type_fuel
+      - *act_cchp_mshp_eff
+      - *act_cchp_mshp_perf
+      - *act_cchp_mshp_cool_type
+      - *act_cchp_mshp_cool_eff_none
+      - *act_cchp_mshp_cool_fraction
+      - *act_cchp_mshp_fuel
+      - *act_cchp_mshp_type_fuel
+      # PV 11kW
+      - *act_pv_smart_9k
+      - *act_pv_smart_11k
+      - *act_pv_smart_13k
+      - *act_pv_ensure_yes
+      # Battery 20kWh
+      - *act_battery_20kwh
+
+
+  # - upgrade_name: Upgrade36_Setpoint_Comfort_Baseline
+
+
+  # - upgrade_name: Upgrade37_Setpoint_Universal_Standard
+
+
+  - upgrade_name: Upgrade99_Baseline_Poweroff
+    options:
+      - option: County Outage|ssp126 2020s

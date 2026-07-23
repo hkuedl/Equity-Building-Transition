@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<measure>
+  <schema_version>3.0</schema_version>
+  <name>apply_county_outage</name>
+  <class_name>ApplyCountyOutage</class_name>
+  <display_name>Apply County Outage</display_name>
+  <description>Injects full-year outage periods from SSP/Year specific JSON indices into HPXML SoftwareInfo.</description>
+  <modeler_description>Parses resources/[ssp]_[year]_Scenario_EPW_Scenario_EPW.json (pre-processed outage intervals) and injects &lt;UnavailablePeriods&gt; based on the building ID key.</modeler_description>
+  <arguments>
+    <argument>
+      <name>outage_mode</name>
+      <display_name>Outage Mode</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>off</default_value>
+      <choices>
+        <choice><value>on</value><display_name>on</display_name></choice>
+        <choice><value>off</value><display_name>off</display_name></choice>
+      </choices>
+    </argument>
+    <argument>
+      <name>ssp_scenario</name>
+      <display_name>SSP Scenario</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>ssp245</default_value>
+      <choices>
+        <choice><value>ssp126</value><display_name>ssp126</display_name></choice>
+        <choice><value>ssp245</value><display_name>ssp245</display_name></choice>
+        <choice><value>ssp585</value><display_name>ssp585</display_name></choice>
+      </choices>
+    </argument>
+    <argument>
+      <name>scenario_year</name>
+      <display_name>Scenario Year</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>2020s</default_value>
+      <choices>
+        <choice><value>2020s</value><display_name>2020s</display_name></choice>
+        <choice><value>2030s</value><display_name>2030s</display_name></choice>
+        <choice><value>2040s</value><display_name>2040s</display_name></choice>
+        <choice><value>2050s</value><display_name>2050s</display_name></choice>
+      </choices>
+    </argument>
+  </arguments>
+  <files>
+    <file>
+      <version>
+        <software_program>OpenStudio</software_program>
+        <identifier>3.0.0</identifier>
+      </version>
+      <filename>measure.rb</filename>
+      <filetype>rb</filetype>
+      <usage_type>script</usage_type>
+    </file>
+    <file><filename>ssp126_2020s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp126_2030s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp126_2040s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp126_2050s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp245_2020s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp245_2030s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp245_2040s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp245_2050s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp585_2020s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp585_2030s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp585_2040s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+    <file><filename>ssp585_2050s_Scenario_EPW_Scenario_EPW.json</filename><filetype>json</filetype><usage_type>resource</usage_type></file>
+  </files>
+</measure>

@@ -1,0 +1,345 @@
+<?xml version="1.0"?>
+<measure>
+  <schema_version>3.1</schema_version>
+  <name>hybrid_islanding_control</name>
+  <uid>9132ad37-f8b7-4834-9e8b-5112b01c2d69</uid>
+  <version_id>bb2453b7-6a76-4a45-87c4-50a30a4ccb91</version_id>
+  <version_modified>2026-04-01T22:32:18Z</version_modified>
+  <xml_checksum>12E536FE</xml_checksum>
+  <class_name>HybridIslandingControl</class_name>
+  <display_name>HybridIslandingControl</display_name>
+  <description>Adds hybrid islanding control for ResStock so the building can switch between grid-connected operation and equivalent off-grid/islanded operation using outage scenarios, battery, PV, and EMS control.</description>
+  <modeler_description>This EnergyPlus measure is intended for ResStock/BuildStock upgrades.
+
+Main logic:
+- When outage_mode=on, the measure automatically resolves the county code,
+  looks up county-specific outage windows from JSON, and creates a utility island schedule.
+- During utility-available periods, the building behaves as grid-connected.
+- During outage periods, the building enters an equivalent islanded state:
+  selected noncritical loads are shed, HVAC availability is restricted,
+  thermostat / sequential fraction schedules can be overridden,
+  and battery/PV dispatch is controlled through EMS + ElectricLoadCenter schedules.
+
+Important note:
+EnergyPlus does not provide a literal "open main breaker" object to disconnect
+the utility in the same way a physical microgrid switch would. Therefore this
+measure approximates off-grid islanding by suppressing loads and utility dependence
+so that purchased electricity should drop toward zero during outage hours.
+</modeler_description>
+  <arguments>
+    <argument>
+      <name>outage_mode</name>
+      <display_name>Outage/islanding control</display_name>
+      <description>off = disables this measure;on = switches between grid-connected and islanded operation using county and scenario JSON.</description>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>on</default_value>
+      <choices>
+        <choice>
+          <value>off</value>
+          <display_name>off</display_name>
+        </choice>
+        <choice>
+          <value>on</value>
+          <display_name>on</display_name>
+        </choice>
+      </choices>
+    </argument>
+    <argument>
+      <name>ssp_scenario</name>
+      <display_name>SSP scenario</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>ssp245</default_value>
+      <choices>
+        <choice>
+          <value>ssp126</value>
+          <display_name>ssp126</display_name>
+        </choice>
+        <choice>
+          <value>ssp245</value>
+          <display_name>ssp245</display_name>
+        </choice>
+        <choice>
+          <value>ssp585</value>
+          <display_name>ssp585</display_name>
+        </choice>
+      </choices>
+    </argument>
+    <argument>
+      <name>scenario_year</name>
+      <display_name>scenarioperiod</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>2020s</default_value>
+      <choices>
+        <choice>
+          <value>2020s</value>
+          <display_name>2020s</display_name>
+        </choice>
+        <choice>
+          <value>2030s</value>
+          <display_name>2030s</display_name>
+        </choice>
+        <choice>
+          <value>2040s</value>
+          <display_name>2040s</display_name>
+        </choice>
+        <choice>
+          <value>2050s</value>
+          <display_name>2050s</display_name>
+        </choice>
+      </choices>
+    </argument>
+    <argument>
+      <name>county_code</name>
+      <display_name>County Code()</display_name>
+      <description>Optional manual override.When blank, the measure first attempts to resolve the county from EPWFilePath or WeatherStation Name in existing.xml.Supports GISJOIN values such as G2500250,and five-digit FIPS values for example 25025.</description>
+      <type>String</type>
+      <required>false</required>
+      <model_dependent>false</model_dependent>
+      <default_value></default_value>
+    </argument>
+    <argument>
+      <name>json_root_dir</name>
+      <display_name>outage JSON directory</display_name>
+      <description>default measure/resources/outage_json.</description>
+      <type>String</type>
+      <required>false</required>
+      <model_dependent>false</model_dependent>
+      <default_value></default_value>
+    </argument>
+    <argument>
+      <name>total_hours</name>
+      <display_name></display_name>
+      <type>Integer</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>8760</default_value>
+    </argument>
+    <argument>
+      <name>battery_initial_soc</name>
+      <display_name> SOC</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>0.95</default_value>
+    </argument>
+    <argument>
+      <name>battery_min_soc</name>
+      <display_name> SOC</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>0.1</default_value>
+    </argument>
+    <argument>
+      <name>battery_max_soc</name>
+      <display_name> SOC</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>0.975</default_value>
+    </argument>
+    <argument>
+      <name>battery_charge_power_w</name>
+      <display_name>(W)</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>5000</default_value>
+    </argument>
+    <argument>
+      <name>battery_discharge_power_w</name>
+      <display_name>(W)</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>5000</default_value>
+    </argument>
+    <argument>
+      <name>critical_misc_w</name>
+      <display_name>(W)</display_name>
+      <description>for example,,.</description>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>46</default_value>
+    </argument>
+    <argument>
+      <name>critical_interior_lighting_w</name>
+      <display_name>(W)</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>44</default_value>
+    </argument>
+    <argument>
+      <name>critical_hvac_w</name>
+      <display_name> HVAC (W)</display_name>
+      <type>Double</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>1500</default_value>
+    </argument>
+    <argument>
+      <name>debug_force_outage_start_hour</name>
+      <display_name>:outage</display_name>
+      <description>. debug_force_outage_duration_hours &gt; 0, island.1  1  1  00:00-01:00.0 .</description>
+      <type>Integer</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>0</default_value>
+    </argument>
+    <argument>
+      <name>debug_force_outage_duration_hours</name>
+      <display_name>:outage</display_name>
+      <description>.default 0 .</description>
+      <type>Integer</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>0</default_value>
+    </argument>
+    <argument>
+      <name>fail_if_no_outage_in_runperiod</name>
+      <display_name> RunPeriod outage</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>false</default_value>
+      <choices>
+        <choice>
+          <value>false</value>
+          <display_name>false</display_name>
+        </choice>
+        <choice>
+          <value>true</value>
+          <display_name>true</display_name>
+        </choice>
+      </choices>
+    </argument>
+    <argument>
+      <name>missing_der_behavior</name>
+      <display_name>DER missing</display_name>
+      <type>Choice</type>
+      <required>true</required>
+      <model_dependent>false</model_dependent>
+      <default_value>fail</default_value>
+      <choices>
+        <choice>
+          <value>fail</value>
+          <display_name>fail</display_name>
+        </choice>
+        <choice>
+          <value>not_applicable</value>
+          <display_name>not_applicable</display_name>
+        </choice>
+      </choices>
+    </argument>
+  </arguments>
+  <outputs />
+  <provenances />
+  <tags>
+    <tag>Envelope.Fenestration</tag>
+  </tags>
+  <attributes>
+    <attribute>
+      <name>Measure Type</name>
+      <value>EnergyPlusMeasure</value>
+      <datatype>string</datatype>
+    </attribute>
+    <attribute>
+      <name>Measure Language</name>
+      <value>Ruby</value>
+      <datatype>string</datatype>
+    </attribute>
+  </attributes>
+  <files>
+    <file>
+      <version>
+        <software_program>OpenStudio</software_program>
+        <identifier>3.8.0</identifier>
+        <min_compatible>3.8.0</min_compatible>
+      </version>
+      <filename>measure.rb</filename>
+      <filetype>rb</filetype>
+      <usage_type>script</usage_type>
+      <checksum>B9D9952E</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp126_2020s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>DA8ECD21</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp126_2030s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>BD7DA858</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp126_2040s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>EFFA011D</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp126_2050s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>8FCB4366</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp245_2020s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>FA5A4D16</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp245_2030s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>23D80753</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp245_2040s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>D7AE1438</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp245_2050s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>CF677719</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp585_2020s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>6D21ADC9</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp585_2030s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>DB126C89</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp585_2040s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>29481041</checksum>
+    </file>
+    <file>
+      <filename>outage_json/ssp585_2050s_Scenario_EPW_Scenario_EPW.json</filename>
+      <filetype>json</filetype>
+      <usage_type>resource</usage_type>
+      <checksum>0017A3DA</checksum>
+    </file>
+  </files>
+</measure>
