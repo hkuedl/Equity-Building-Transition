@@ -170,5 +170,5 @@ folder names and complete scenario names.
 ## Citation
 
 Please cite the associated manuscript and this repository when using the code
-or processed data. Full bibliographic information can be added here after
+or processed data. Full bibliographic information will be added here after
 publication.
