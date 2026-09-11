@@ -144,8 +144,7 @@ See the folder-level READMEs for stage-specific variables and expected inputs.
 County, Alabama (`FIPS 01001`) under SSP1-2.6. It includes all 17 retrofit
 metric files for 66 ResStock template buildings and a reviewed fixed mapping
 for 25,573 real buildings. The demo therefore runs the two optimization entry
-points without downloading the full national dataset or supplying
-`upgrade0.csv`.
+points without downloading the full national dataset.
 
 From the repository root:
 
