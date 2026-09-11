@@ -33,7 +33,7 @@ reproduction run.
 
 ## Data
 
-The complete processed dataset is available from
+The complete processed dataset is available from [Google Drive](https://drive.google.com/drive/folders/1x8d4INtwHMS3tLm3ZKz8F94jgDxMNXmX?usp=drive_link) or
 [Baidu Netdisk](https://pan.baidu.com/s/1Zmslm9jTQkPtMizqMWV_qg?pwd=p5d3)
 (Code: `p5d3`).
 
