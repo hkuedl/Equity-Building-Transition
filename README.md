@@ -17,7 +17,7 @@ The overview of the proposed Equity-oriented Building Transition framework is pr
 
 The framework includes three major parts: future scenario, simulation, and optimization. In the future scenario, three shared socioeconomic pathways are utilized to represent different carbon emission levels in the research period 2020-2060. In the Simulation, active and passive technologies at different technical levels are combined to formulate the strategy pool for transition. The building energy simulation output is used for evaluation of carbon emissions, thermal stress, and total cost. In the Optimization, the recommended retrofit strategy is obtained by minimizing the inequity and mapped for each real-world building.
 
-![xx](Github Figures/Framework.svg)
+![Framework](<Github Figures/Framework.svg>)
 
 ## Requirements
 
