@@ -148,7 +148,7 @@ See the folder-level READMEs for stage-specific variables and expected inputs.
 
 ## Key results
 
-
+![Strategies](<Github Figures/Strategies.svg>)
 
 ## Quick-start demo
 
