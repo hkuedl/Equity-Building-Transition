@@ -144,6 +144,10 @@ separate output locations. The most widely used variables are:
 
 See the folder-level READMEs for stage-specific variables and expected inputs.
 
+## Key results
+
+
+
 ## Quick-start demo
 
 [`Demo`](./Demo/) provides a compact end-to-end reproduction for Autauga
