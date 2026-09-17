@@ -2,7 +2,7 @@
 
 _This project develops a building-level workflow for evaluating residential
 retrofit strategies under future climate and power-outage conditions. It
-combines future weather construction, ResStock simulations, postprocessed
+combines future weather construction, ResStock simulations, post-processed
 energy/carbon/comfort/cost metrics, and multi-objective pathway optimization
 to identify retrofit decisions for individual buildings across the United
 States._
@@ -10,6 +10,12 @@ States._
 The repository contains the code used to construct future scenarios, run
 building simulations, calculate strategy metrics, and optimize cost-, carbon-,
 resilience-, and equity-oriented retrofit pathways.
+
+##Overview
+
+The overview of the proposed Equity-oriented Building Transition framework is presented in the following figure.
+
+The framework includes three major parts: future scenario, simulation, and optimization. In the future scenario, three shared socioeconomic pathways, SSP126, SSP245, and SSP585, are utilized to represent different carbon emission levels in the research period 2020-2060. In the Simulation, active and passive technologies at different technical levels are combined to formulate the strategy pool for transition. TMY future weather, coupled with extreme weather and power outages, is taken as input for building energy simulation. The simulation output is used for evaluation of carbon emissions, thermal stress, and total cost. In the Optimization, the recommended retrofit strategy is obtained by minimizing the inequity and mapped for each real-world building.
 
 ## Requirements
 
