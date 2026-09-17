@@ -11,7 +11,7 @@ The repository contains the code used to construct future scenarios, run
 building simulations, calculate strategy metrics, and optimize cost-, carbon-,
 resilience-, and equity-oriented retrofit pathways.
 
-##Overview
+## Overview
 
 The overview of the proposed Equity-oriented Building Transition framework is presented in the following figure.
 
