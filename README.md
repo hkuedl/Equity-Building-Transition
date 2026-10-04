@@ -150,7 +150,7 @@ See the folder-level READMEs for stage-specific variables and expected inputs.
 
 **Building-scale visualization platform for projected annual operational carbon emissions from U.S. homes, based on the data outputs in the work. More details can be seen in the [website](http://103.30.77.119/).**
 
-![Strategies](<Github Figures/Home.jpg>)
+![Strategies](<Github Figures/Home.png>)
 
 ![Strategies](<Github Figures/Map.jpg>)
 
