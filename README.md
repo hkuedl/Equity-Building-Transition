@@ -148,9 +148,11 @@ See the folder-level READMEs for stage-specific variables and expected inputs.
 
 ## Key results
 
-**Composition of all retrofit strategies based on the upgrade technologies in ResStock.**
+**Building-scale visualization platform for projected annual operational carbon emissions from U.S. homes, based on the data outputs in the work. More details can be seen in the [website](http://103.30.77.119/).**
 
-![Strategies](<Github Figures/Home.svg>)
+![Strategies](<Github Figures/Home.jpg>)
+
+![Strategies](<Github Figures/Map.jpg>)
 
 **Performance and equity implications of residential building transition pathways.** **a–c**, Relative carbon emissions, thermal stress, and total resident costs under SSP126 (**a**), SSP245 (**b**) and SSP585 (**c**) across both traditional and equity-oriented transition pathways. Values are normalized to the business-as-usual (BAU) scenario, defined as no retrofit over the 40-year period. Carbon emissions and thermal stress are summed across four representative years, with one year selected for each decade from the 2020s to the 2050s. Total resident costs include 40-year energy costs, retrofit capital and replacement expenditures, expressed as net present values. **d–f**, Inequity metrics under SSP126 (**d**), SSP245 (**e**) and SSP585 (**f**) are decomposed into the variance in cost burden across income groups and the violation of the burden threshold (20% in the study). Decadal cost burden is calculated from 10-year energy costs relative to 10-year income, plus one-time capital expenditure relative to five-year income.
 
